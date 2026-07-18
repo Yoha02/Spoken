@@ -2,7 +2,7 @@ import type { TripObject } from "@/core/tripObject";
 import type { TripPhase } from "@/ui/lib/tripPhase";
 
 /** Completed stages the user can revisit as historical context. */
-export type RecapStage = "intake" | "calls" | "booking" | "verification";
+export type RecapStage = "intake" | "calls" | "booking" | "verification" | "guardian";
 
 type StageId = RecapStage | "confirmed";
 type StageState = "upcoming" | "active" | "done";
@@ -13,6 +13,7 @@ const STAGES: { id: StageId; label: string; sponsor: string }[] = [
   { id: "booking", label: "Booking", sponsor: "Sabre" },
   { id: "verification", label: "Verification", sponsor: "PayPal" },
   { id: "confirmed", label: "Confirmed", sponsor: "Spoken" },
+  { id: "guardian", label: "Guardian", sponsor: "Sabre · Vocal Bridge" },
 ];
 
 /** Derives each stage purely from live trip state — never manually set. */
@@ -33,7 +34,15 @@ function stageStates(trip: TripObject, phase: TripPhase): Record<StageId, StageS
 
   const confirmed: StageState = phase === "paid" ? "done" : "upcoming";
 
-  return { intake, calls, booking, verification, confirmed };
+  // Guardian activates once armed; "done" only after a disruption was healed
+  // (status back to green with an alert in the history).
+  const guardian: StageState = !trip.guardian
+    ? "upcoming"
+    : trip.guardian.status === "green" && trip.guardian.events.some((e) => e.kind === "alert")
+      ? "done"
+      : "active";
+
+  return { intake, calls, booking, verification, confirmed, guardian };
 }
 
 const DOT_COLOR: Record<StageState, string> = {
@@ -61,11 +70,38 @@ export function RunTimeline({
         {STAGES.map((stage, i) => {
           const state = states[stage.id];
           const clickable =
-            stage.id !== "confirmed" &&
-            (state === "done" || (stage.id === "verification" && state === "active"));
+            stage.id === "guardian"
+              ? phase === "paid" || !!trip.guardian
+              : stage.id !== "confirmed" &&
+                (state === "done" || (stage.id === "verification" && state === "active"));
           const selected = activeRecap === stage.id;
           const labelTone =
-            state === "upcoming" ? "text-muted" : selected ? "text-amber" : "text-paper";
+            state === "upcoming" && !(stage.id === "guardian" && clickable)
+              ? "text-muted"
+              : selected
+                ? "text-amber"
+                : "text-paper";
+
+          // Guardian's dot reflects its live status: green all-clear,
+          // red disruption, amber while self-healing.
+          const guardianColor = trip.guardian
+            ? trip.guardian.status === "red"
+              ? "var(--signal)"
+              : trip.guardian.status === "healing"
+                ? "var(--amber)"
+                : "var(--success)"
+            : "var(--muted)";
+          const dotColor =
+            stage.id === "guardian"
+              ? guardianColor
+              : state === "upcoming"
+                ? "var(--muted)"
+                : DOT_COLOR[state];
+          const dotFilled = stage.id === "guardian" ? !!trip.guardian : state !== "upcoming";
+          const dotPulsing =
+            stage.id === "guardian"
+              ? trip.guardian?.status === "red" || trip.guardian?.status === "healing"
+              : state === "active";
 
           return (
             <div key={stage.id} className="flex flex-1 items-center last:flex-none">
@@ -83,10 +119,10 @@ export function RunTimeline({
               >
                 <span className="flex items-center gap-2.5">
                   <span
-                    className={`h-3 w-3 rounded-full ${state === "active" ? "animate-pulse-dot" : ""}`}
+                    className={`h-3 w-3 rounded-full ${dotPulsing ? "animate-pulse-dot" : ""}`}
                     style={{
-                      backgroundColor: state === "upcoming" ? "transparent" : DOT_COLOR[state],
-                      boxShadow: `0 0 0 1.5px ${DOT_COLOR[state]}`,
+                      backgroundColor: dotFilled ? dotColor : "transparent",
+                      boxShadow: `0 0 0 1.5px ${dotColor}`,
                     }}
                   />
                   <span

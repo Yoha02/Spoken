@@ -42,6 +42,17 @@ const LABELS: Record<string, (arg: string, ok: boolean) => string> = {
   "opentable.requestTable": (arg) => `Calling restaurant — ${arg}`,
   "opentable.reserve": (arg, ok) =>
     ok ? `Dinner reserved — ${arg}` : `Dinner reservation failed — ${arg}`,
+  "sabre.subscribeFlightStatus": (arg, ok) =>
+    ok ? `Sabre flight tracking armed — ${arg}` : `Sabre flight tracking failed — ${arg}`,
+  "sabre.flightStatus": (arg) => `Flight status — ${arg}`,
+  "sabre.flightAlert": (arg) => `FLIGHT ALERT — ${arg}`,
+  "sabre.modifyBooking": (arg, ok) =>
+    ok ? `Sabre booking updated — ${arg}` : `Sabre booking update failed — ${arg}`,
+  "spoken.selfHeal": (arg) => `Self-heal engaged — ${arg}`,
+  "uber.tripStatus": (arg) => `Uber status — ${arg}`,
+  "uber.reschedule": (arg, ok) =>
+    ok ? `Uber rescheduled — ${arg}` : `Uber reschedule failed — ${arg}`,
+  "vocalbridge.notifyTravelers": (arg) => `Travelers notified — ${arg}`,
   "paypal.createOrder": (arg, ok) =>
     ok ? `PayPal order created — ${arg}` : `PayPal order failed — ${arg}`,
   "paypal.captureOrder": (arg, ok) =>

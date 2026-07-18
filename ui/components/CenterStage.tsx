@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Leg, TripObject } from "@/core/tripObject";
 import type { TripPhase } from "@/ui/lib/tripPhase";
 import type { RecapStage } from "./RunTimeline";
@@ -136,6 +136,10 @@ function RecapView({
   recap: RecapStage;
   onExit?: () => void;
 }) {
+  if (recap === "guardian") {
+    return <GuardianView trip={trip} onExit={onExit} />;
+  }
+
   if (recap === "booking") {
     return (
       <div className="relative h-full">
@@ -231,6 +235,91 @@ function RecapView({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+const GUARDIAN_STATUS_META = {
+  green: { label: "All clear", color: "var(--success)" },
+  red: { label: "Disruption detected", color: "var(--signal)" },
+  healing: { label: "Self-healing", color: "var(--amber)" },
+} as const;
+
+const GUARDIAN_EVENT_META: Record<
+  "ok" | "alert" | "heal" | "info",
+  { icon: string; color: string }
+> = {
+  ok: { icon: "✓", color: "var(--success)" },
+  alert: { icon: "!", color: "var(--signal)" },
+  heal: { icon: "↻", color: "var(--amber)" },
+  info: { icon: "·", color: "var(--ice)" },
+};
+
+/** Trip Guardian: live flight tracking milestones + self-heal actions. */
+function GuardianView({ trip, onExit }: { trip: TripObject; onExit?: () => void }) {
+  const guardian = trip.guardian;
+  const status = GUARDIAN_STATUS_META[guardian?.status ?? "green"];
+  const pulsing = guardian?.status === "red" || guardian?.status === "healing";
+  const listRef = useRef<HTMLDivElement>(null);
+  const eventCount = guardian?.events.length ?? 0;
+
+  // Keep the newest milestone in view as the timeline unfolds on camera.
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+  }, [eventCount]);
+
+  return (
+    <div
+      className="animate-fade-in relative flex h-full flex-col rounded-2xl border-2 bg-panel p-8 transition-colors"
+      style={{ borderColor: status.color }}
+    >
+      <BackToLive onExit={onExit} />
+
+      <div className="flex items-center gap-3">
+        <span
+          className={`h-3.5 w-3.5 rounded-full ${pulsing ? "animate-pulse-dot" : ""}`}
+          style={{ backgroundColor: status.color }}
+        />
+        <span className="font-mono text-sm uppercase tracking-widest" style={{ color: status.color }}>
+          Trip Guardian — {status.label}
+        </span>
+      </div>
+      <h2 className="mt-2 font-display text-3xl uppercase tracking-tight text-paper">
+        Post-trip tracking
+      </h2>
+
+      <div ref={listRef} className="mt-5 flex-1 space-y-2.5 overflow-y-auto">
+        {!guardian || guardian.events.length === 0 ? (
+          <p className="font-mono italic text-muted">Arming Guardian — subscribing to flight status…</p>
+        ) : (
+          guardian.events.map((event, i) => {
+            const meta = GUARDIAN_EVENT_META[event.kind];
+            const latest = i === guardian.events.length - 1;
+            return (
+              <div
+                key={`${event.ts}-${i}`}
+                className={`animate-slide-in-up flex items-start gap-3 rounded-lg border px-4 py-3 ${
+                  latest ? "bg-bg/40" : ""
+                }`}
+                style={{ borderColor: event.kind === "alert" ? "var(--signal)" : "var(--hairline)" }}
+              >
+                <span
+                  className="mt-0.5 w-4 shrink-0 text-center font-mono text-sm font-bold"
+                  style={{ color: meta.color }}
+                >
+                  {meta.icon}
+                </span>
+                <p
+                  className="font-mono text-sm leading-relaxed"
+                  style={{ color: event.kind === "alert" ? "var(--signal)" : "var(--paper)" }}
+                >
+                  {event.message}
+                </p>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }

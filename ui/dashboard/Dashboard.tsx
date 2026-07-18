@@ -65,6 +65,15 @@ export default function Dashboard() {
       setRecapStage(null);
       return;
     }
+    if (stage === "guardian") {
+      // First click arms the Guardian (idempotent server-side), then the
+      // tracking view stays open while the timeline unfolds.
+      if (!trip?.guardian) {
+        void fetch("/api/guardian", { method: "POST" }).catch(() => {});
+      }
+      setRecapStage((current) => (current === "guardian" ? null : "guardian"));
+      return;
+    }
     setRecapStage((current) => (current === stage ? null : stage));
   }
 

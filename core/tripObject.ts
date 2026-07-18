@@ -22,10 +22,26 @@ export type Leg =
       notes?: string; status: "calling" | "booked" | "failed" }
   | { type: "ride"; note: string; price?: number; status: "proposed" | "booked" };
 
+export type GuardianEvent = {
+  ts: number;
+  /** ok = on-time milestone, alert = disruption, heal = self-heal action, info = notification */
+  kind: "ok" | "alert" | "heal" | "info";
+  message: string;
+};
+
+export type GuardianState = {
+  /** green = all clear, red = disruption detected, healing = self-heal in progress */
+  status: "green" | "red" | "healing";
+  /** Post-booking flight tracking milestones + self-heal actions, in order. */
+  events: GuardianEvent[];
+};
+
 export type TripObject = {
   sessionId: string;
   /** "preview" when the current run is server-simulated; "live" for real calls. */
   mode?: "live" | "preview";
+  /** Trip Guardian: post-confirmation flight tracking + self-heal. Unset until armed. */
+  guardian?: GuardianState;
   dest: string;          // "AUS"
   dateRange: [string, string];
   budgetPerPerson: number;
@@ -115,6 +131,21 @@ export function appendTrace(entry: { ts: number; server: string; fn: string; arg
   return trip;
 }
 
+export function setGuardianStatus(status: GuardianState["status"]): TripObject {
+  trip.guardian = { status, events: trip.guardian?.events ?? [] };
+  notify();
+  return trip;
+}
+
+export function appendGuardianEvent(event: GuardianEvent): TripObject {
+  if (!trip.guardian) {
+    trip.guardian = { status: "green", events: [] };
+  }
+  trip.guardian.events.push(event);
+  notify();
+  return trip;
+}
+
 // Monotonic run counter: background preview timelines capture the generation
 // at start and abort as soon as a newer run bumps it, so a re-trigger never
 // has two timelines writing into the same trip.
@@ -144,6 +175,7 @@ export function resetTripForRun(): TripObject {
   trip.split = undefined;
   trip.toolTrace = [];
   trip.mode = undefined;
+  trip.guardian = undefined;
   trip.travelers = trip.travelers.map((t) => ({
     ...t,
     origin: undefined,

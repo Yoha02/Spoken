@@ -1,7 +1,7 @@
 # Checkpoint
 
 > Overwrite this file in place. A task is not done until this file reflects it.
-> Last updated: 2026-07-18 13:05 PT by Yoha's Cursor agent
+> Last updated: 2026-07-18 13:45 PT by Yoha's Cursor agent
 
 ## Where we are
 
@@ -44,7 +44,7 @@
 | `backend/paypal/` corporate checkout | Done — **corporate account model**: gate is HR "Verify trip expenses" (per-traveler breakdown + total, X to dismiss, "Authorize payment"), creates ONE PayPal order for the full booked total; capture marks everything paid → TripConfirmation cards. **Billing rule (decided 07-18 13:00): booked expenses (legs/totalCost) are the charge; budgetPerPerson × headcount is only a pre-booking estimate fallback — budget is a cap, never overrides booked totals.** Verified E2E in sandbox: $2,429 booked total → one order, 3 equal display shares, order reuse on re-authorize works. Still needed: sandbox buyer login to complete checkout on camera; add creds to Cloud Run env on next deploy. Confirmation emails after payment = Ravi. |
 | `backend/sabre/` auth | Done (needs EPR creds to verify via GET /api/sabre/token) |
 | `backend/sabre/` shop + book | **Stubbed 501 — critical path, in progress (see Claims)** |
-| Disruption → self-heal (clip 4) | **Not built — in progress (see Claims)** |
+| Disruption → self-heal (clip 4) | **Done — Trip Guardian**: 6th timeline stage (clickable after payment) arms `POST /api/guardian` → paced tracking view: Uber pickups + departure on time → mid-flight wildfire-smoke delay (+1h05m, dot flips red, flight ETAs update to 3:40 PM) → self-heal (Uber rescheduled, VB call to Kimber Modern, Sabre booking modified at **$0 change · no approval needed**) → SMS to travelers → dot back green + "continuing to monitor" close (~47s total). Verified E2E locally. |
 | `ui/` dashboard + canvas | Done (server preview timeline covers clips 1–3; local phase-preview strip removed) |
 
 ## Claims (who is doing what right now)
@@ -52,7 +52,7 @@
 | Who | Task | Since |
 |---|---|---|
 | Ravi | Connect Gmail add-on to live Cloud Run URL, validate LandingAI end-to-end | 07-18 09:20 |
-| Yoha's Cursor agent | Next: Sabre shop/book implementation + disrupt/self-heal demo routes | 07-18 09:20 |
+| Yoha's Cursor agent | Trip Guardian shipped; next: Cloud Run redeploy for recording | 07-18 13:45 |
 | Nikhil | Recording his call clip at the gym; VB agent outbound config | 07-18 morning |
 
 ## Next steps (ordered)
@@ -60,7 +60,7 @@
 1. Ravi: set Apps Script Script Properties (`SWARM_API_URL` = Cloud Run URL, `SWARM_SECRET` =
    trigger secret from Yoha) → click "Start travel swarm" on the CEO email → verify dashboard.
 2. Sabre shop → writes flight legs + totalCost; book → flips legs to booked (unlocks payment gate).
-3. Disrupt/self-heal routes → clip 4 recordable (flight delay → rebook → provider call → green).
+3. ~~Disrupt/self-heal routes~~ DONE — Trip Guardian (clip 4 recordable end-to-end).
 4. Configure both VB agents with the interview prompt, outbound enabled, one test call.
 5. Record clips (order: 2 → 1 → 3 → 4); dashboard preview mode is the fallback for any clip.
 6. After any code change that a clip depends on: redeploy to Cloud Run and note the SHA here.
