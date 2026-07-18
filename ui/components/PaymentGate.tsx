@@ -32,8 +32,8 @@ export function PaymentGate({
     return (
       <div className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-bg/85 p-6 backdrop-blur-sm">
         <div className="animate-pop-in flex w-full max-w-lg flex-col items-center rounded-2xl border-2 border-success bg-panel p-10 text-center">
-          <span className="font-display text-3xl uppercase tracking-tight text-success">Requests sent</span>
-          <p className="mt-3 font-mono text-sm text-muted">Waiting on approvals from the group...</p>
+          <span className="font-display text-3xl uppercase tracking-tight text-success">PayPal requests sent</span>
+          <p className="mt-3 font-mono text-sm text-muted">Opening checkout — waiting on traveler approvals...</p>
         </div>
       </div>
     );
@@ -85,17 +85,23 @@ export function PaymentGate({
         {!hasSplit && (
           <button
             onClick={onApprove}
-            disabled={approving}
+            disabled={approving || billableTotal <= 0}
             className="mt-6 w-full rounded-lg bg-amber px-4 py-3 font-display uppercase tracking-wide text-bg transition hover:brightness-110 disabled:opacity-50"
           >
-            {approving ? "Sending..." : "Approve & send requests"}
+            {approving ? "Creating PayPal orders..." : "Approve & send requests"}
           </button>
+        )}
+
+        {!hasSplit && billableTotal <= 0 && (
+          <p className="mt-3 font-mono text-[11px] text-signal">
+            No final total yet — book the trip (or set budget) before sending PayPal requests.
+          </p>
         )}
 
         {hasSplit && (
           <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted">
-            PayPal sandbox checkout links created per traveler. Complete payment with a sandbox
-            personal buyer account, or leave as requested for the demo.
+            PayPal checkout links created per traveler. Open each link and complete payment with a
+            sandbox personal buyer account — status flips to paid only after capture.
           </p>
         )}
 

@@ -24,13 +24,21 @@ const LABELS: Record<string, (arg: string, ok: boolean) => string> = {
   "vocalbridge.start_vocal_bridge_swarm": (arg, ok) =>
     ok ? `Vocal Bridge swarm started — ${arg}` : `Vocal Bridge swarm skipped — ${arg}`,
   "vocalbridge.placeOutboundCall": (arg, ok) =>
-    ok ? `Vocal Bridge calling ${arg}` : `Vocal Bridge call failed — ${arg}`,
+    ok
+      ? arg.includes("simulated")
+        ? `Simulated call — ${arg}`
+        : `Vocal Bridge calling ${arg}`
+      : `Vocal Bridge call failed — ${arg}`,
   "vocalbridge.constraint_saved": (arg) => `Constraint saved — ${arg}`,
   "sabre.getSabreToken": (_arg, ok) => (ok ? "Sabre: authenticated" : "Sabre: auth failed"),
+  "sabre.mockBook": (arg, ok) =>
+    ok ? `Demo booking locked — ${arg}` : `Demo booking failed — ${arg}`,
   "paypal.splitPayment": (arg, ok) =>
     ok ? `PayPal split sent — ${arg}` : `PayPal split failed — ${arg}`,
   "paypal.createOrder": (arg, ok) =>
     ok ? `PayPal order created — ${arg}` : `PayPal order failed — ${arg}`,
+  "paypal.captureOrder": (arg, ok) =>
+    ok ? `PayPal payment captured — ${arg}` : `PayPal capture failed — ${arg}`,
 };
 
 export function buildActionFeed(trip: TripObject): FeedItem[] {

@@ -80,9 +80,22 @@ async function createCheckoutOrder(input: {
 /**
  * HR payment gate: "Approve & send requests".
  * Creates one PayPal sandbox Checkout order per traveler (equal split) and
- * marks each row paypalStatus = "requested".
+ * marks each row paypalStatus = "requested" with an approveUrl for checkout.
+ *
+ * Optional JSON body: `{ totalCost?: number }` — used when the live trip
+ * does not yet have a booked total (e.g. preview/demo with final totals).
  */
-export async function splitPayment() {
+export async function splitPayment(req: Request) {
+  let bodyTotal: number | undefined;
+  try {
+    const body = (await req.json()) as { totalCost?: unknown };
+    if (typeof body.totalCost === "number" && Number.isFinite(body.totalCost) && body.totalCost > 0) {
+      bodyTotal = body.totalCost;
+    }
+  } catch {
+    // Empty body is fine for live trips that already have totals.
+  }
+
   const trip = getTrip();
   const travelers = trip.travelers;
 
@@ -97,7 +110,12 @@ export async function splitPayment() {
     );
   }
 
-  const total = resolveBillableTotal(trip);
+  // Prefer client-provided final total when the in-memory trip has none yet.
+  if (bodyTotal && trip.totalCost <= 0) {
+    updateTrip({ totalCost: bodyTotal });
+  }
+
+  const total = resolveBillableTotal(getTrip());
   if (total <= 0) {
     return NextResponse.json(
       {
@@ -109,7 +127,7 @@ export async function splitPayment() {
   }
 
   // Sync totalCost if we only had budget so the UI matches the charge.
-  if (trip.totalCost <= 0) {
+  if (getTrip().totalCost <= 0) {
     updateTrip({ totalCost: total });
   }
 

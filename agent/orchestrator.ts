@@ -1,21 +1,32 @@
 import { NextResponse } from "next/server";
 import { startVocalBridgeSwarm } from "@/agent/tools/startVocalBridgeSwarm";
 import { applyDirectoryPhones } from "@/backend/intake/employeeDirectory";
+import { vocalBridgeModeLabel } from "@/core/featureFlags";
 import { getTrip, updateTrip } from "@/core/tripObject";
 
-// "Start swarm" — places Vocal Bridge outbound calls for every traveler
-// currently on the TripObject (usually the three names Landing AI extracted).
+// "Start swarm" — places Vocal Bridge outbound calls (or simulates them when
+// VOCALBRIDGE_CALLS_ENABLED=false) for every traveler on the TripObject.
 export async function startSwarm() {
   const trip = getTrip();
   // Always re-apply EMPLOYEE_PHONE_* so seed / stale trip phones never dial.
-  const travelers = applyDirectoryPhones(trip.travelers).filter((t) => t.phone);
-  if (travelers.length > 0) {
-    updateTrip({ travelers });
+  const withPhones = applyDirectoryPhones(trip.travelers);
+  // Test mode (no real calls) can run without E.164 phones; live mode cannot.
+  const travelers =
+    vocalBridgeModeLabel() === "test"
+      ? withPhones.filter((t) => t.name)
+      : withPhones.filter((t) => t.phone);
+  if (withPhones.length > 0) {
+    updateTrip({ travelers: withPhones });
   }
 
   if (travelers.length === 0) {
     return NextResponse.json(
-      { error: "No travelers on the trip — import a CEO email first" },
+      {
+        error:
+          vocalBridgeModeLabel() === "live"
+            ? "No travelers with phones — set EMPLOYEE_PHONE_* or switch Voice to TEST"
+            : "No travelers on the trip — import a CEO email first",
+      },
       { status: 400 }
     );
   }
@@ -34,8 +45,10 @@ export async function startSwarm() {
 
     return NextResponse.json({
       ok: result.ok,
+      mode: result.mode ?? vocalBridgeModeLabel(),
       calls: result.calls,
       travelerCount: travelers.length,
+      booked: result.booked,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Swarm failed";

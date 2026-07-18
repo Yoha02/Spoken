@@ -1,6 +1,9 @@
 import { placeOutboundCall, getCallLog } from "@/agent/vocalbridge/client";
 import { extractPreferences } from "@/agent/tools/extractPreferences";
+import { simulateVocalBridgeSwarm } from "@/agent/tools/simulateSwarm";
 import { applyDirectoryPhones } from "@/backend/intake/employeeDirectory";
+import { mockBookItinerary } from "@/backend/sabre/mockBook";
+import { isVocalBridgeCallsEnabled, vocalBridgeModeLabel } from "@/core/featureFlags";
 import {
   appendTrace,
   appendTranscript,
@@ -42,6 +45,12 @@ export type StartVocalBridgeSwarmResult = {
   ok: boolean;
   calls: SwarmCallResult[];
 };
+
+function hashId(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return h;
+}
 
 function purposeLine(input: StartVocalBridgeSwarmInput): string {
   const dest = input.dest || getTrip().dest || "the destination";
@@ -87,11 +96,12 @@ function applyDiscoveredPreferences(travelerId: string): Partial<Traveler> {
 
 /**
  * Tool invoked after Landing AI extracts who must travel.
- * Places parallel outbound Vocal Bridge calls and starts light transcript polling.
+ * Places parallel outbound Vocal Bridge calls (live) or simulates them when
+ * VOCALBRIDGE_CALLS_ENABLED is false (test mode) — see core/featureFlags.ts.
  */
 export async function startVocalBridgeSwarm(
   input: StartVocalBridgeSwarmInput
-): Promise<StartVocalBridgeSwarmResult> {
+): Promise<StartVocalBridgeSwarmResult & { mode: "live" | "test"; booked?: ReturnType<typeof mockBookItinerary> }> {
   const purpose = purposeLine(input);
   // Prefer live directory phones over any stale seed / cached numbers.
   const refreshed = applyDirectoryPhones(
@@ -103,26 +113,55 @@ export async function startVocalBridgeSwarm(
       transcript: [],
     }))
   );
-  const travelers = refreshed
-    .map((t) => ({ id: t.id, name: t.name, phone: t.phone }))
-    .filter((t) => t.phone && t.name);
+  // Live mode requires real E.164 phones; test mode can proceed without dialable numbers.
+  const travelers = (
+    isVocalBridgeCallsEnabled()
+      ? refreshed.filter((t) => t.name && t.phone)
+      : refreshed.filter((t) => t.name)
+  ).map((t) => ({
+    id: t.id,
+    name: t.name,
+    phone: t.phone || `+1555000${Math.abs(hashId(t.id) % 10000)
+      .toString()
+      .padStart(4, "0")}`,
+  }));
 
   if (travelers.length === 0) {
     appendTrace({
       ts: Date.now(),
       server: "vocalbridge",
       fn: "start_vocal_bridge_swarm",
-      arg: "no travelers",
+      arg: isVocalBridgeCallsEnabled()
+        ? "no travelers with dialable phones"
+        : "no travelers",
       ok: false,
     });
-    return { ok: false, calls: [] };
+    return { ok: false, calls: [], mode: vocalBridgeModeLabel() };
   }
 
+  // ── Test mode: no real dials; mock prefs + mock book → PayPal-ready ─────
+  if (!isVocalBridgeCallsEnabled()) {
+    // Fresh iteration: drop any prior split so Approve & send can run again.
+    if (getTrip().split?.length) {
+      updateTrip({ split: undefined });
+    }
+
+    const results = await simulateVocalBridgeSwarm(travelers, purpose);
+    const booked = mockBookItinerary("after simulated Vocal Bridge swarm");
+    return {
+      ok: results.some((r) => r.ok),
+      calls: results,
+      mode: "test",
+      booked,
+    };
+  }
+
+  // ── Live mode: real Vocal Bridge outbound calls ─────────────────────────
   appendTrace({
     ts: Date.now(),
     server: "vocalbridge",
     fn: "start_vocal_bridge_swarm",
-    arg: `${travelers.length} travelers — ${purpose.slice(0, 80)}`,
+    arg: `${travelers.length} travelers — LIVE — ${purpose.slice(0, 70)}`,
     ok: true,
   });
 
@@ -183,7 +222,7 @@ export async function startVocalBridgeSwarm(
   );
 
   const ok = results.some((r) => r.ok);
-  return { ok, calls: results };
+  return { ok, calls: results, mode: "live" };
 }
 
 /** Poll Vocal Bridge logs a few times and append new transcript text. */

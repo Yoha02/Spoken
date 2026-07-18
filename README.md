@@ -74,8 +74,8 @@ anything inside `app/`.**
 
 | Domain | Files | Status |
 |---|---|---|
-| `agent/` | `vocalbridge/client.ts`, `tools/startVocalBridgeSwarm.ts`, `voiceToken.ts`, `orchestrator.ts` | Implemented (needs `VOCALBRIDGE_API_KEY`) |
-| `backend/sabre/` | `auth.ts` (token, implemented), `shop.ts`, `book.ts` | Auth done, shop/book stubbed (501) |
+| `agent/` | `vocalbridge/client.ts`, `tools/startVocalBridgeSwarm.ts`, `tools/simulateSwarm.ts`, `voiceToken.ts`, `orchestrator.ts` | Implemented; gated by `VOCALBRIDGE_CALLS_ENABLED` |
+| `backend/sabre/` | `auth.ts` (token), `shop.ts`, `book.ts` (501), `mockBook.ts` (test-mode book) | Auth done; mock book used when voice is in test mode |
 | `backend/paypal/` | `auth.ts`, `split.ts` (Checkout orders per traveler) | Implemented (sandbox `PAYPAL_*`) |
 | `backend/intake/` | `gmail.ts`, `landingai.ts`, `employeeDirectory.ts`, `applyExtraction.ts`, `extract.ts`, `importEmail.ts` | Implemented |
 | `ui/` | `dashboard/`, `canvas/`, `components/`, `hooks/`, `lib/` | Implemented |
@@ -123,6 +123,27 @@ npm run dev
 All secrets in `.env.local` are read server-side only, inside route
 handlers. Never prefix them with `NEXT_PUBLIC_` and never import them into a
 client component.
+
+## Vocal Bridge test mode (iterate without burning calls)
+
+Real outbound calls are limited — default is **test mode**:
+
+```bash
+# .env.local
+VOCALBRIDGE_CALLS_ENABLED=false   # simulate calls + mock book → PayPal
+# VOCALBRIDGE_CALLS_ENABLED=true  # real Vocal Bridge dials
+```
+
+In test mode, **Start swarm** / import auto-swarm:
+
+1. Skips Vocal Bridge HTTP entirely  
+2. Stages ringing → live → mock transcript → done with origin/seat/diet  
+3. Runs a demo Sabre booking (`backend/sabre/mockBook.ts`) so legs + `totalCost` land  
+4. Clears any prior PayPal `split` so you can re-run **Approve & send requests**
+
+Toggle at runtime on the organizer panel (**Voice: TEST / LIVE**) or
+`POST /api/flags` with `{ "vocalBridgeCallsEnabled": true }`. Runtime overrides
+last until the server process restarts (env default applies again after restart).
 
 ## Gmail setup (for "Import latest email")
 
