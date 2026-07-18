@@ -13,6 +13,11 @@ import { PaymentGate } from "@/ui/components/PaymentGate";
 import { TripConfirmation } from "@/ui/components/TripConfirmation";
 import { RunTimeline, type RecapStage } from "@/ui/components/RunTimeline";
 
+/**
+ * Client-side hint for the corporate charge: actual booked expenses (priced
+ * legs / totalCost) win; budget × headcount is only a pre-booking estimate.
+ * The server recomputes authoritatively in backend/paypal/split.ts.
+ */
 function resolveBillableTotal(trip: {
   totalCost: number;
   budgetPerPerson: number;
@@ -20,24 +25,14 @@ function resolveBillableTotal(trip: {
   legs: { type: string; price?: number }[];
 }): number {
   const n = trip.travelers.length;
-  const fromLegs = trip.legs.reduce((sum, leg) => {
-    if (leg.type === "flight" || leg.type === "hotel") {
-      return sum + (typeof leg.price === "number" ? leg.price : 0);
-    }
-    return sum;
-  }, 0);
-  const fromBudget = trip.budgetPerPerson > 0 && n > 0 ? trip.budgetPerPerson * n : 0;
-  let fromCost = trip.totalCost > 0 ? trip.totalCost : 0;
-  if (fromCost > 0 && n > 1 && trip.budgetPerPerson > 0) {
-    if (Math.abs(fromCost - trip.budgetPerPerson) < 0.02) {
-      fromCost = trip.budgetPerPerson * n;
-    }
-  }
-  if (fromCost > 0 && n > 1 && fromLegs > 0) {
-    const per = fromLegs / n;
-    if (Math.abs(fromCost - per) < 0.02) fromCost = fromLegs;
-  }
-  return Math.max(fromLegs, fromCost, fromBudget);
+  const fromLegs = trip.legs.reduce(
+    (sum, leg) => sum + (typeof leg.price === "number" ? leg.price : 0),
+    0
+  );
+  const fromCost = trip.totalCost > 0 ? trip.totalCost : 0;
+  const booked = Math.max(fromLegs, fromCost);
+  if (booked > 0) return booked;
+  return trip.budgetPerPerson > 0 && n > 0 ? trip.budgetPerPerson * n : 0;
 }
 
 export default function Dashboard() {

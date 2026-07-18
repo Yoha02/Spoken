@@ -17,21 +17,17 @@ export function PaymentGate({
 }) {
   const hasSplit = !!trip.split && trip.split.length > 0;
   const n = trip.travelers.length;
-  const fromLegs = trip.legs.reduce((sum, leg) => {
-    if (leg.type === "flight" || leg.type === "hotel") {
-      return sum + (typeof leg.price === "number" ? leg.price : 0);
-    }
-    return sum;
-  }, 0);
-  const fromBudget = trip.budgetPerPerson > 0 && n > 0 ? trip.budgetPerPerson * n : 0;
-  let fromCost = trip.totalCost > 0 ? trip.totalCost : 0;
-  if (fromCost > 0 && n > 1 && trip.budgetPerPerson > 0) {
-    if (Math.abs(fromCost - trip.budgetPerPerson) < 0.02) {
-      fromCost = trip.budgetPerPerson * n;
-    }
-  }
+  // Corporate account pays actual booked expenses (all priced legs / totalCost).
+  // budgetPerPerson is a cap, not the charge — only an estimate before booking.
+  const fromLegs = trip.legs.reduce(
+    (sum, leg) => sum + ("price" in leg && typeof leg.price === "number" ? leg.price : 0),
+    0
+  );
+  const fromCost = trip.totalCost > 0 ? trip.totalCost : 0;
   const splitSum = hasSplit && trip.split ? trip.split.reduce((s, r) => s + r.amount, 0) : 0;
-  const billableTotal = Math.max(fromLegs, fromCost, fromBudget, splitSum);
+  const booked = Math.max(fromLegs, fromCost, splitSum);
+  const billableTotal =
+    booked > 0 ? booked : trip.budgetPerPerson > 0 && n > 0 ? trip.budgetPerPerson * n : 0;
   const perPerson = n > 0 ? billableTotal / n : 0;
   const approveUrl = trip.split?.find((s) => s.approveUrl)?.approveUrl;
 

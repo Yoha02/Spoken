@@ -1,7 +1,7 @@
 # Checkpoint
 
 > Overwrite this file in place. A task is not done until this file reflects it.
-> Last updated: 2026-07-18 12:50 PT by Yoha's Cursor agent
+> Last updated: 2026-07-18 13:05 PT by Yoha's Cursor agent
 
 ## Where we are
 
@@ -41,7 +41,7 @@
 | `core/` state + SSE | Done |
 | `backend/intake/` Gmail + LandingAI | Done (LandingAI key still missing → regex fallback fires) |
 | `agent/` VB swarm calls | Done; agents need outbound + interview prompt configured in VB dashboard |
-| `backend/paypal/` corporate checkout | Done — **reframed as corporate account**: gate is HR "Verify trip expenses" (per-traveler breakdown + total, X to dismiss, "Authorize payment"), creates ONE PayPal order for the full total; capture marks everything paid. Sandbox creds are in Yoha's `.env.local` and order creation is verified live. Still needed: sandbox buyer login to complete checkout on camera; add creds to Cloud Run env on next deploy. Confirmation emails after payment = Ravi. |
+| `backend/paypal/` corporate checkout | Done — **corporate account model**: gate is HR "Verify trip expenses" (per-traveler breakdown + total, X to dismiss, "Authorize payment"), creates ONE PayPal order for the full booked total; capture marks everything paid → TripConfirmation cards. **Billing rule (decided 07-18 13:00): booked expenses (legs/totalCost) are the charge; budgetPerPerson × headcount is only a pre-booking estimate fallback — budget is a cap, never overrides booked totals.** Verified E2E in sandbox: $2,429 booked total → one order, 3 equal display shares, order reuse on re-authorize works. Still needed: sandbox buyer login to complete checkout on camera; add creds to Cloud Run env on next deploy. Confirmation emails after payment = Ravi. |
 | `backend/sabre/` auth | Done (needs EPR creds to verify via GET /api/sabre/token) |
 | `backend/sabre/` shop + book | **Stubbed 501 — critical path, in progress (see Claims)** |
 | Disruption → self-heal (clip 4) | **Not built — in progress (see Claims)** |

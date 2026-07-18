@@ -21,8 +21,8 @@ function moneyRound(n: number): number {
 function sumLegPrices(trip: TripObject): number {
   let sum = 0;
   for (const leg of trip.legs) {
-    if (leg.type === "flight" || leg.type === "hotel") {
-      sum += typeof leg.price === "number" ? leg.price : 0;
+    if ("price" in leg && typeof leg.price === "number") {
+      sum += leg.price;
     }
   }
   return moneyRound(sum);
@@ -30,15 +30,17 @@ function sumLegPrices(trip: TripObject): number {
 
 /**
  * Full group total — never a single traveler share when n > 1.
- * Prefer booked legs, then totalCost (with per-person guard), then budget × headcount.
+ * The corporate account pays actual booked expenses: legs / totalCost win.
+ * budgetPerPerson × headcount is only a pre-booking ESTIMATE fallback — the
+ * budget is a cap, not the charge, so it must never override booked totals.
  */
 function resolveBillableTotal(trip: TripObject, clientHint?: number): number {
   const n = trip.travelers.length;
   const fromLegs = sumLegPrices(trip);
-  const fromBudget =
-    trip.budgetPerPerson > 0 && n > 0 ? moneyRound(trip.budgetPerPerson * n) : 0;
 
   let fromCost = trip.totalCost > 0 ? moneyRound(trip.totalCost) : 0;
+  // Guard: a per-person figure stored as the group total (only when it can't
+  // be a coincidence — i.e. it exactly matches budget or legs ÷ n).
   if (fromCost > 0 && n > 1 && trip.budgetPerPerson > 0) {
     if (Math.abs(fromCost - trip.budgetPerPerson) < 0.02) {
       fromCost = moneyRound(trip.budgetPerPerson * n);
@@ -49,17 +51,16 @@ function resolveBillableTotal(trip: TripObject, clientHint?: number): number {
     if (Math.abs(fromCost - per) < 0.02) fromCost = fromLegs;
   }
 
-  let hint =
+  const booked = Math.max(fromLegs, fromCost);
+  if (booked > 0) return booked;
+
+  const hint =
     typeof clientHint === "number" && Number.isFinite(clientHint) && clientHint > 0
       ? moneyRound(clientHint)
       : 0;
-  if (hint > 0 && n > 1 && trip.budgetPerPerson > 0) {
-    if (Math.abs(hint - trip.budgetPerPerson) < 0.02) {
-      hint = moneyRound(trip.budgetPerPerson * n);
-    }
-  }
+  if (hint > 0) return hint;
 
-  return Math.max(fromLegs, fromCost, fromBudget, hint);
+  return trip.budgetPerPerson > 0 && n > 0 ? moneyRound(trip.budgetPerPerson * n) : 0;
 }
 
 function equalShares(total: number, count: number): number[] {
