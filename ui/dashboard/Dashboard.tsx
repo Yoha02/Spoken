@@ -11,6 +11,7 @@ import { CenterStage } from "@/ui/components/CenterStage";
 import { ActionFeed } from "@/ui/components/ActionFeed";
 import { PaymentGate } from "@/ui/components/PaymentGate";
 import { TripConfirmation } from "@/ui/components/TripConfirmation";
+import { RunTimeline, type RecapStage } from "@/ui/components/RunTimeline";
 
 function resolveBillableTotal(trip: {
   totalCost: number;
@@ -54,13 +55,26 @@ export default function Dashboard() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [capturingPayment, setCapturingPayment] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  const [recapStage, setRecapStage] = useState<RecapStage | null>(null);
 
-  // Re-arm the gate whenever we leave the payment phase (fresh run or paid).
+  // Phase transitions snap back to live: re-arm the gate and close any recap
+  // so a recording never lingers in historical context while the run advances.
   useEffect(() => {
     if (phase !== "awaiting_payment") setGateDismissed(false);
+    setRecapStage(null);
   }, [phase]);
 
+  function handleStageSelect(stage: RecapStage) {
+    if (stage === "verification" && phase === "awaiting_payment") {
+      setGateDismissed(false);
+      setRecapStage(null);
+      return;
+    }
+    setRecapStage((current) => (current === stage ? null : stage));
+  }
+
   // Confirmation ONLY after PayPal redirect. Plain / always shows mission control.
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -220,11 +234,26 @@ export default function Dashboard() {
   const dimmed = gateOpen;
 
   return (
-    <main className="bg-scanlines min-h-screen bg-bg px-8 py-6 text-paper">
+    <main className="bg-scanlines min-h-screen bg-bg px-8 pb-28 pt-6 text-paper">
       <div className={`transition-all duration-300 ${dimmed ? "pointer-events-none scale-[0.99] opacity-30 blur-[1px]" : ""}`}>
         <TopBar trip={trip} phase={phase} />
 
-        <MissionControlStrip connected={connected} />
+        <MissionControlStrip
+          connected={connected}
+          onReset={() => {
+            setCaptureNote(null);
+            setApproveError(null);
+            setGateDismissed(false);
+            setRecapStage(null);
+            setShowConfirmation(false);
+            setCaptureError(null);
+            try {
+              sessionStorage.removeItem("paypalJustPaid");
+            } catch {
+              /* ignore */
+            }
+          }}
+        />
 
         {phase === "paid" && (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/40 bg-panel/50 px-4 py-3">
@@ -254,7 +283,12 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
             <div className="h-[440px]">
-              <CenterStage trip={trip} phase={phase} />
+              <CenterStage
+                trip={trip}
+                phase={phase}
+                recap={recapStage}
+                onExitRecap={() => setRecapStage(null)}
+              />
             </div>
             <div className="h-[440px] rounded-2xl border border-hairline bg-panel/40 p-4">
               <ActionFeed items={feed} />
@@ -274,25 +308,24 @@ export default function Dashboard() {
         />
       )}
 
-      {phase === "awaiting_payment" && gateDismissed && (
-        <button
-          onClick={() => setGateDismissed(false)}
-          className="fixed bottom-6 right-6 z-40 rounded-full border border-amber bg-panel px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-amber shadow-lg transition hover:bg-amber/10"
-        >
-          Complete verification →
-        </button>
-      )}
-
       {captureNote && !dimmed && (
         <p className="fixed bottom-16 left-1/2 z-40 -translate-x-1/2 rounded-lg border border-success/40 bg-panel px-4 py-2 font-mono text-xs text-success">
           {captureNote}
         </p>
       )}
+
+      <RunTimeline trip={trip} phase={phase} activeRecap={recapStage} onSelect={handleStageSelect} />
     </main>
   );
 }
 
-function MissionControlStrip({ connected }: { connected: boolean }) {
+function MissionControlStrip({
+  connected,
+  onReset,
+}: {
+  connected: boolean;
+  onReset: () => void;
+}) {
   const [pastedText, setPastedText] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -361,23 +394,30 @@ function MissionControlStrip({ connected }: { connected: boolean }) {
         placeholder="...or paste trip text"
         className="min-w-[220px] flex-1 rounded border border-hairline bg-bg px-3 py-1.5 font-mono text-[11px] text-paper placeholder:text-muted focus:border-ice focus:outline-none"
       />
+      {/* Extract = fresh run: wipes the previous run's feed/legs/payment state.
+          With pasted text it also re-extracts trip details (no auto-calls) —
+          Start swarm then launches the run clean. */}
       <button
-        onClick={() =>
+        onClick={() => {
+          onReset();
           run(
             () =>
-              fetch("/api/extract", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: pastedText }),
-              }),
+              pastedText.trim()
+                ? fetch("/api/extract", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: pastedText, autoSwarm: false }),
+                  })
+                : fetch("/api/reset", { method: "POST" }),
             (b) => {
+              if (!pastedText.trim()) return "Dashboard reset — ready for a fresh run";
               const n = Array.isArray(b.travelers) ? b.travelers.length : 0;
-              if (!n) return `Extracted via ${b.source as string}`;
-              return `Extracted via ${b.source as string} · ${n} travelers → Vocal Bridge`;
+              if (!n) return `Extracted via ${b.source as string} — ready for Start swarm`;
+              return `Extracted via ${b.source as string} · ${n} travelers — press Start swarm`;
             }
-          )
-        }
-        disabled={busy || !pastedText.trim()}
+          );
+        }}
+        disabled={busy}
         className="rounded border border-hairline px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide text-muted hover:text-paper disabled:opacity-50"
       >
         Extract

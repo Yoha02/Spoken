@@ -1,4 +1,4 @@
-import { appendTrace, getTrip, updateTrip, type Leg } from "@/core/tripObject";
+import { appendTrace, getRunGeneration, getTrip, updateTrip, type Leg } from "@/core/tripObject";
 import { isPreviewFast } from "@/core/featureFlags";
 
 function sleep(ms: number) {
@@ -46,11 +46,14 @@ function trace(server: string, fn: string, arg: string, ok = true) {
  * one by one → everything booked with realistic record locators → totalCost.
  * Runs after the preview call swarm so origins/seats come from the calls.
  */
-export async function runPreviewBooking(): Promise<{
-  ok: true;
+export async function runPreviewBooking(runGen?: number): Promise<{
+  ok: boolean;
   totalCost: number;
   legCount: number;
 }> {
+  // A newer run (re-trigger) invalidates this one; stop writing immediately.
+  const stale = () => runGen !== undefined && getRunGeneration() !== runGen;
+
   const trip = getTrip();
   const destCode = (trip.dest || "AUS").slice(0, 3).toUpperCase();
   const checkIn = trip.dateRange?.[0] || "2026-08-17";
@@ -71,11 +74,13 @@ export async function runPreviewBooking(): Promise<{
   updateTrip({ legs: [], totalCost: 0, split: undefined });
 
   // ── Shop ─────────────────────────────────────────────────────────────────
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
   trace("sabre", "getSabreToken", "");
   await sleep(1400);
 
   const origins = Array.from(new Set(party.map((t) => (t.origin || "SFO").slice(0, 3).toUpperCase())));
   for (const origin of origins) {
+    if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
     const options = 9 + (hashId(origin) % 6);
     const from = 248 + (hashId(origin) % 40);
     trace("sabre", "shopFlights", `${origin} → ${destCode} · ${options} options · nonstop from $${from}`);
@@ -87,6 +92,7 @@ export async function runPreviewBooking(): Promise<{
   const flightPrices = new Map<string, number>();
 
   for (const t of party) {
+    if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
     const origin = (t.origin || "SFO").slice(0, 3).toUpperCase();
     const price = 278 + (hashId(t.id) % 70);
     flightPrices.set(t.id, price);
@@ -101,12 +107,15 @@ export async function runPreviewBooking(): Promise<{
       price,
       status: "proposed",
     });
-    await sleep(1500);
+    trace("sabre", "holdFlight", `${t.name} · ${origin} → ${destCode} · AA · $${price}`);
+    await sleep(1800);
   }
 
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
   trace("sabre", "shopHotels", `${destCode} downtown · ${nights} nights · ${rooms} room(s)`);
   await sleep(1600);
 
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
   const hotelPrice = moneyRound(178 * nights * rooms);
   const hotelIndex = getTrip().legs.length;
   pushLeg({
@@ -118,8 +127,10 @@ export async function runPreviewBooking(): Promise<{
     price: hotelPrice,
     status: "proposed",
   });
-  await sleep(1500);
+  trace("sabre", "holdHotel", `Kimber Modern · ${nights} nights · ${rooms} room(s) · $${hotelPrice}`);
+  await sleep(1800);
 
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
   const ridePrice = 96;
   const rideIndex = getTrip().legs.length;
   const hasNikhil = party.some((t) => t.id === "nikhil");
@@ -129,7 +140,8 @@ export async function runPreviewBooking(): Promise<{
     price: ridePrice,
     status: "proposed",
   });
-  await sleep(1500);
+  trace("uber", "quote", `airport ↔ hotel${hasNikhil ? " + Fremont pickup" : ""} · $${ridePrice}`);
+  await sleep(1800);
 
   // Group dinner the evening after check-in.
   const dinnerTime = (() => {
@@ -138,6 +150,7 @@ export async function runPreviewBooking(): Promise<{
     d.setUTCDate(d.getUTCDate() + 1);
     return `${d.toISOString().slice(0, 10)}T19:30`;
   })();
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
   const vegCount = party.filter((t) => (t.diet || "").toLowerCase().includes("veg")).length;
   const dinnerIndex = getTrip().legs.length;
   pushLeg({
@@ -148,9 +161,11 @@ export async function runPreviewBooking(): Promise<{
     notes: vegCount > 0 ? `${vegCount} vegetarian` : undefined,
     status: "calling",
   });
+  trace("opentable", "requestTable", `Uchi · party of ${party.length}`);
 
   // ── Book ─────────────────────────────────────────────────────────────────
   await sleep(2200);
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
 
   const groupPnr = pnrFor(`${destCode}-${checkIn}-${party.map((t) => t.id).join(",")}`);
   getTrip().legs.forEach((leg, i) => {
@@ -159,21 +174,26 @@ export async function runPreviewBooking(): Promise<{
   trace("sabre", "createBooking", `${party.length} flights ${origins.join("/")} → ${destCode} · PNR ${groupPnr}`);
   await sleep(1600);
 
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
   patchLeg(hotelIndex, { status: "booked" });
   trace("sabre", "createBooking", `Kimber Modern · ${nights} nights · conf ${pnrFor(`hotel-${checkIn}`)}`);
   await sleep(1400);
 
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
   patchLeg(rideIndex, { status: "booked" });
   trace("uber", "scheduleRide", `airport ↔ hotel${hasNikhil ? " + Fremont pickup" : ""} · $${ridePrice}`);
   await sleep(1400);
 
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
   patchLeg(dinnerIndex, { status: "booked" });
   trace("opentable", "reserve", `Uchi · party of ${party.length}${vegCount ? ` · ${vegCount} vegetarian` : ""}`);
   await sleep(900);
 
+  if (stale()) return { ok: false, totalCost: 0, legCount: 0 };
   const flightsTotal = Array.from(flightPrices.values()).reduce((a, b) => a + b, 0);
   const totalCost = moneyRound(flightsTotal + hotelPrice + ridePrice);
   updateTrip({ totalCost });
+  trace("sabre", "priceItinerary", `$${totalCost} total · ${party.length} travelers`);
 
   return { ok: true, totalCost, legCount: getTrip().legs.length };
 }

@@ -31,10 +31,15 @@ const LABELS: Record<string, (arg: string, ok: boolean) => string> = {
     ok ? `Sabre flight search — ${arg}` : `Sabre flight search failed — ${arg}`,
   "sabre.shopHotels": (arg, ok) =>
     ok ? `Sabre hotel search — ${arg}` : `Sabre hotel search failed — ${arg}`,
+  "sabre.holdFlight": (arg) => `Sabre fare held — ${arg}`,
+  "sabre.holdHotel": (arg) => `Sabre hotel held — ${arg}`,
   "sabre.createBooking": (arg, ok) =>
     ok ? `Sabre booking confirmed — ${arg}` : `Sabre booking failed — ${arg}`,
+  "sabre.priceItinerary": (arg) => `Itinerary priced — ${arg}`,
+  "uber.quote": (arg) => `Uber quote — ${arg}`,
   "uber.scheduleRide": (arg, ok) =>
     ok ? `Uber scheduled — ${arg}` : `Uber scheduling failed — ${arg}`,
+  "opentable.requestTable": (arg) => `Calling restaurant — ${arg}`,
   "opentable.reserve": (arg, ok) =>
     ok ? `Dinner reserved — ${arg}` : `Dinner reservation failed — ${arg}`,
   "paypal.createOrder": (arg, ok) =>

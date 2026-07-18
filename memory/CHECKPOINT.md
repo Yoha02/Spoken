@@ -1,7 +1,7 @@
 # Checkpoint
 
 > Overwrite this file in place. A task is not done until this file reflects it.
-> Last updated: 2026-07-18 12:00 PT by Yoha's Cursor agent
+> Last updated: 2026-07-18 12:50 PT by Yoha's Cursor agent
 
 ## Where we are
 
@@ -16,13 +16,21 @@
 - Full app skeleton is merged to `main`: intake (Gmail + LandingAI), Vocal Bridge
   outbound swarm with transcript polling, PayPal sandbox split + capture, SSE dashboard + canvas UI.
 - **Preview mode is the recording path** (`VOCALBRIDGE_CALLS_ENABLED=false`, the default):
-  any extract/Gmail trigger **resets the trip** and plays a paced server-side timeline —
-  staggered calls with highlight lines (matched to the real VB agent prompts: Nikhil
-  SJC→SFO/window/Fremont Uber, Eyoha SFO/aisle/vegetarian) → staged Sabre flight+hotel
-  search → legs land one by one → booked with group PNR → payment gate → real PayPal
-  capture → "Trip confirmed" end screen. Only UI tell is a small "Preview" chip in the
-  top bar; no "test/simulated/demo" wording anywhere. `PREVIEW_FAST=true` env collapses
-  pacing for iteration. Voice LIVE/TEST UI toggle removed (POST /api/flags still works).
+  paced server-side timeline — staggered calls with highlight lines (matched to the real
+  VB agent prompts: Nikhil SJC→SFO/window/Fremont Uber, Eyoha SFO/aisle/vegetarian) →
+  staged Sabre flight+hotel search → legs land one by one → booked with group PNR →
+  payment gate → real PayPal capture → "Trip confirmed" end screen. Only UI tell is a
+  small "Preview" chip in the top bar; no "test/simulated/demo" wording anywhere.
+  `PREVIEW_FAST=true` env collapses pacing for iteration.
+- **Demo controls (recording flow)**: **Extract = reset** (wipes feed/legs/payment/call
+  state via new `POST /api/reset`; with pasted text it re-extracts trip details but does
+  NOT auto-call) → **Start swarm = launch**. "Import latest email" still auto-swarms
+  (Gmail add-on path). Calls are paced ~30–40s each (connect → relay highlights → close),
+  verified: Nikhil 31s, Ravi 31s, Eyoha 38s. Action feed now mirrors every center-stage
+  event (fare/hotel holds, Uber quote, restaurant call, bookings, priced total). A run
+  generation counter aborts any in-flight preview timeline when a new run starts — no
+  ghost writes on re-trigger. Bottom `RunTimeline` nav (Intake → Calls → Booking →
+  Verification → Confirmed, sponsor-labeled) is clickable for recap views.
 - `.env.local` exists locally on Yoha's machine (VB keys, phones, LandingAI key, trigger secret).
   Not committed (correct). Cloud Run env file at `tmp/cloudrun-env.yaml` (gitignored).
 
@@ -56,6 +64,8 @@
 4. Configure both VB agents with the interview prompt, outbound enabled, one test call.
 5. Record clips (order: 2 → 1 → 3 → 4); dashboard preview mode is the fallback for any clip.
 6. After any code change that a clip depends on: redeploy to Cloud Run and note the SHA here.
+   **Pending: Cloud Run is still on `32f1d19` — redeploy needed to pick up preview pacing,
+   Extract-reset, and corporate PayPal changes before recording from the hosted URL.**
 
 ## Blocked on humans
 

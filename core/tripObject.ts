@@ -115,12 +115,27 @@ export function appendTrace(entry: { ts: number; server: string; fn: string; arg
   return trip;
 }
 
+// Monotonic run counter: background preview timelines capture the generation
+// at start and abort as soon as a newer run bumps it, so a re-trigger never
+// has two timelines writing into the same trip.
+const globalForRun = globalThis as unknown as { __runGeneration?: number };
+
+export function getRunGeneration(): number {
+  return globalForRun.__runGeneration ?? 0;
+}
+
+export function bumpRunGeneration(): number {
+  globalForRun.__runGeneration = getRunGeneration() + 1;
+  return globalForRun.__runGeneration;
+}
+
 /**
  * Fresh take: clears everything a demo run produces (legs, costs, payment
  * split, tool feed, call state/prefs on travelers) while keeping the roster.
  * Called whenever a new extract/trigger comes in so every recording starts clean.
  */
 export function resetTripForRun(): TripObject {
+  bumpRunGeneration();
   trip.dest = "";
   trip.dateRange = ["", ""];
   trip.budgetPerPerson = 0;

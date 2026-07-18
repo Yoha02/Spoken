@@ -23,6 +23,10 @@ const FLASH_MS = 2600;
 export function useDisplayPhase(trip: TripObject | null): TripPhase {
   const prevLegStatuses = useRef<Map<string, string>>(new Map());
   const prevAllBooked = useRef(false);
+  // Timer lives in a ref, NOT in the effect cleanup: the effect re-runs on
+  // every trip update (SSE ticks), and cleanup-based timeouts get cancelled
+  // by unrelated updates — leaving the flash stuck on screen forever.
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [flash, setFlash] = useState<TripPhase | null>(null);
 
   const basePhase = trip ? computeTripPhase(trip) : "planning";
@@ -48,10 +52,18 @@ export function useDisplayPhase(trip: TripObject | null): TripPhase {
     const nextFlash: TripPhase | null = rebooked ? "rebooked" : justBooked ? "booked" : null;
     if (nextFlash) {
       setFlash(nextFlash);
-      const timeout = setTimeout(() => setFlash(null), FLASH_MS);
-      return () => clearTimeout(timeout);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => setFlash(null), FLASH_MS);
     }
   }, [trip]);
+
+  // Clear any pending flash timer on unmount only.
+  useEffect(
+    () => () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+    },
+    []
+  );
 
   return flash ?? basePhase;
 }

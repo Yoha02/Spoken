@@ -7,6 +7,7 @@ import { isVocalBridgeCallsEnabled, vocalBridgeModeLabel } from "@/core/featureF
 import {
   appendTrace,
   appendTranscript,
+  bumpRunGeneration,
   getTrip,
   updateTrip,
   type Traveler,
@@ -143,12 +144,18 @@ export async function startVocalBridgeSwarm(
   // shop/book) in the background and return immediately so triggers (Gmail
   // add-on, Extract) don't block for the full run.
   if (!isVocalBridgeCallsEnabled()) {
-    updateTrip({ mode: "preview", split: undefined });
+    // Clear prior run output up front (not just at the booking stage) so a
+    // re-run never shows the payment gate over the new calls.
+    updateTrip({ mode: "preview", split: undefined, legs: [], totalCost: 0 });
 
+    // Bump + capture the run generation: any prior in-flight preview timeline
+    // (from a re-clicked Start swarm or a new extract) sees the mismatch and
+    // aborts, so two timelines never write into the same trip.
+    const runGen = bumpRunGeneration();
     void (async () => {
       try {
-        await simulateVocalBridgeSwarm(travelers, purpose);
-        await runPreviewBooking();
+        await simulateVocalBridgeSwarm(travelers, purpose, runGen);
+        await runPreviewBooking(runGen);
       } catch (err) {
         appendTrace({
           ts: Date.now(),
