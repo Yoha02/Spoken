@@ -6,6 +6,8 @@ const DEFAULT_API_URL = "https://vocalbridgeai.com";
 export type PlaceCallInput = {
   phoneNumber: string; // E.164
   name?: string;
+  /** Traveler id — resolves a per-traveler agent/key if one is configured. */
+  travelerId?: string;
 };
 
 export type PlaceCallResult = {
@@ -31,19 +33,27 @@ function apiBase(): string {
   );
 }
 
-function apiKey(): string {
+// Some travelers have their own dedicated Vocal Bridge agent/key rather than
+// sharing the account-wide one — checked first as VOCALBRIDGE_API_KEY_<ID>.
+function apiKeyFor(travelerId?: string): string {
+  if (travelerId) {
+    const perTraveler = process.env[`VOCALBRIDGE_API_KEY_${travelerId.toUpperCase()}`];
+    if (perTraveler) return perTraveler;
+  }
+
   const key = process.env.VOCALBRIDGE_API_KEY || process.env.VOCAL_BRIDGE_API_KEY;
   if (!key) {
-    throw new Error(
-      "Missing VOCALBRIDGE_API_KEY (or VOCAL_BRIDGE_API_KEY) — set it in .env.local"
-    );
+    const hint = travelerId
+      ? `VOCALBRIDGE_API_KEY_${travelerId.toUpperCase()} or the global VOCALBRIDGE_API_KEY`
+      : "VOCALBRIDGE_API_KEY (or VOCAL_BRIDGE_API_KEY)";
+    throw new Error(`Missing Vocal Bridge API key — set ${hint} in .env.local`);
   }
   return key;
 }
 
-function headers(): HeadersInit {
+function headers(travelerId?: string): HeadersInit {
   const h: Record<string, string> = {
-    "X-API-Key": apiKey(),
+    "X-API-Key": apiKeyFor(travelerId),
     "Content-Type": "application/json",
     "User-Agent": "Spoken/swarm-mode",
   };
@@ -52,10 +62,14 @@ function headers(): HeadersInit {
   return h;
 }
 
-async function vbFetch(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
+async function vbFetch(
+  path: string,
+  init?: RequestInit,
+  travelerId?: string
+): Promise<Record<string, unknown>> {
   const res = await fetch(`${apiBase()}${path}`, {
     ...init,
-    headers: { ...headers(), ...(init?.headers as Record<string, string> | undefined) },
+    headers: { ...headers(travelerId), ...(init?.headers as Record<string, string> | undefined) },
   });
 
   const text = await res.text();
@@ -94,10 +108,14 @@ export async function placeOutboundCall(input: PlaceCallInput): Promise<PlaceCal
   const payload: Record<string, string> = { phone_number: phone };
   if (input.name) payload.participant_name = input.name;
 
-  const raw = await vbFetch("/api/v1/calls", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  const raw = await vbFetch(
+    "/api/v1/calls",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    input.travelerId
+  );
 
   return {
     callId: (raw.call_id as string) ?? (raw.id as string),
@@ -110,6 +128,9 @@ export async function placeOutboundCall(input: PlaceCallInput): Promise<PlaceCal
 }
 
 /** Fetch a call/session log (for transcript polling after outbound). */
-export async function getCallLog(sessionId: string): Promise<Record<string, unknown>> {
-  return vbFetch(`/api/v1/logs/${sessionId}`);
+export async function getCallLog(
+  sessionId: string,
+  travelerId?: string
+): Promise<Record<string, unknown>> {
+  return vbFetch(`/api/v1/logs/${sessionId}`, undefined, travelerId);
 }

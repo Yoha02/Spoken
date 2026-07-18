@@ -1,4 +1,5 @@
 import { placeOutboundCall, getCallLog } from "@/agent/vocalbridge/client";
+import { extractPreferences } from "@/agent/tools/extractPreferences";
 import { applyDirectoryPhones } from "@/backend/intake/employeeDirectory";
 import {
   appendTrace,
@@ -62,6 +63,29 @@ function setTravelerStatus(travelerId: string, callStatus: Traveler["callStatus"
 }
 
 /**
+ * Re-scans a traveler's accumulated transcript for origin/seat/diet and
+ * writes back only fields not already set. Returns the newly-discovered
+ * fields (empty object if nothing new) so the caller can log what changed.
+ */
+function applyDiscoveredPreferences(travelerId: string): Partial<Traveler> {
+  const trip = getTrip();
+  const traveler = trip.travelers.find((t) => t.id === travelerId);
+  if (!traveler) return {};
+
+  const found = extractPreferences(traveler.transcript);
+  const newly: Partial<Traveler> = {};
+  if (found.origin && !traveler.origin) newly.origin = found.origin;
+  if (found.seat && !traveler.seat) newly.seat = found.seat;
+  if (found.diet && !traveler.diet) newly.diet = found.diet;
+
+  if (Object.keys(newly).length === 0) return {};
+
+  const travelers = trip.travelers.map((t) => (t.id === travelerId ? { ...t, ...newly } : t));
+  updateTrip({ travelers });
+  return newly;
+}
+
+/**
  * Tool invoked after Landing AI extracts who must travel.
  * Places parallel outbound Vocal Bridge calls and starts light transcript polling.
  */
@@ -108,7 +132,7 @@ export async function startVocalBridgeSwarm(
   const results = await Promise.all(
     travelers.map(async (t): Promise<SwarmCallResult> => {
       try {
-        const call = await placeOutboundCall({ phoneNumber: t.phone, name: t.name });
+        const call = await placeOutboundCall({ phoneNumber: t.phone, name: t.name, travelerId: t.id });
         setTravelerStatus(t.id, "live");
         appendTranscript(
           t.id,
@@ -168,7 +192,7 @@ async function pollTranscript(travelerId: string, sessionId: string) {
   for (let i = 0; i < 12; i++) {
     await sleep(8_000);
     try {
-      const log = await getCallLog(sessionId);
+      const log = await getCallLog(sessionId, travelerId);
       const status = String(log.status ?? log.call_status ?? "").toLowerCase();
       const text =
         (log.transcript_text as string) ||
@@ -182,11 +206,27 @@ async function pollTranscript(travelerId: string, sessionId: string) {
               .join("\n")
           : "");
 
+      let gotNewLine = false;
       if (text) {
         for (const line of text.split("\n").filter(Boolean)) {
           if (seen.has(line)) continue;
           seen.add(line);
           appendTranscript(travelerId, line);
+          gotNewLine = true;
+        }
+      }
+
+      if (gotNewLine) {
+        const newly = applyDiscoveredPreferences(travelerId);
+        if (Object.keys(newly).length > 0) {
+          const parts = [newly.origin, newly.seat, newly.diet].filter(Boolean);
+          appendTrace({
+            ts: Date.now(),
+            server: "vocalbridge",
+            fn: "constraint_saved",
+            arg: `${travelerId}: ${parts.join(" · ")}`,
+            ok: true,
+          });
         }
       }
 

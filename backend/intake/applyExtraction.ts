@@ -1,4 +1,4 @@
-import { resolveEmployees } from "@/backend/intake/employeeDirectory";
+import { getEmployeeDirectory, resolveEmployees } from "@/backend/intake/employeeDirectory";
 import type { ExtractedTripFields } from "@/backend/intake/landingai";
 import { startVocalBridgeSwarm } from "@/agent/tools/startVocalBridgeSwarm";
 import { appendTrace, updateTrip, type Traveler } from "@/core/tripObject";
@@ -7,6 +7,25 @@ export type ApplyExtractionOptions = {
   /** When true (default), auto-invoke Vocal Bridge after a successful extract. */
   autoSwarm?: boolean;
 };
+
+// These two currently have real Vocal Bridge agents/credentials configured
+// (see .env.local) — always include them in the swarm call whenever the
+// destination updates, regardless of whether the CEO email happened to
+// name them explicitly. Extend this list as more travelers get real creds.
+const ALWAYS_CALL_IDS = ["nikhil", "eyoha"];
+
+function withRequiredTravelers(matched: Traveler[]): Traveler[] {
+  const directory = getEmployeeDirectory();
+  const result = [...matched];
+  for (const id of ALWAYS_CALL_IDS) {
+    if (result.some((t) => t.id === id)) continue;
+    const entry = directory.find((e) => e.id === id);
+    if (entry) {
+      result.push({ id: entry.id, name: entry.name, phone: entry.phone, callStatus: "idle", transcript: [] });
+    }
+  }
+  return result;
+}
 
 export type ApplyExtractionResult = {
   fields: ExtractedTripFields;
@@ -26,6 +45,10 @@ export async function applyExtractionToTrip(
   const { autoSwarm = true } = options;
 
   const { matched, unmatched } = resolveEmployees(fields.travelerNames ?? []);
+  // Whenever the destination updates, make sure the travelers with real
+  // configured Vocal Bridge creds are on the call list even if the source
+  // text didn't happen to name them.
+  const travelers = fields.dest ? withRequiredTravelers(matched) : matched;
 
   if (unmatched.length > 0) {
     appendTrace({
@@ -41,29 +64,29 @@ export async function applyExtractionToTrip(
   if (fields.dest) patch.dest = fields.dest;
   if (fields.dateRange) patch.dateRange = fields.dateRange;
   if (fields.budgetPerPerson != null) patch.budgetPerPerson = fields.budgetPerPerson;
-  if (matched.length > 0) patch.travelers = matched;
+  if (travelers.length > 0) patch.travelers = travelers;
 
   updateTrip(patch);
 
-  if (matched.length > 0) {
+  if (travelers.length > 0) {
     appendTrace({
       ts: Date.now(),
       server: "intake",
       fn: "resolveEmployees",
-      arg: matched.map((t) => t.name).join(", "),
+      arg: travelers.map((t) => t.name).join(", "),
       ok: true,
     });
   }
 
   let swarm: ApplyExtractionResult["swarm"];
-  if (autoSwarm && matched.length > 0) {
+  if (autoSwarm && travelers.length > 0) {
     swarm = await startVocalBridgeSwarm({
       purpose:
         fields.purpose ||
         `Collect travel prefs for ${fields.dest || "trip"} — named by CEO`,
       dest: fields.dest,
       dateRange: fields.dateRange,
-      travelers: matched.map((t) => ({
+      travelers: travelers.map((t) => ({
         id: t.id,
         name: t.name,
         phone: t.phone,
@@ -73,7 +96,7 @@ export async function applyExtractionToTrip(
 
   return {
     fields,
-    travelers: matched,
+    travelers,
     unmatchedNames: unmatched,
     swarm,
   };
