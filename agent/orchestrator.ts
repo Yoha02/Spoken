@@ -10,9 +10,9 @@ export async function startSwarm() {
   const trip = getTrip();
   // Always re-apply EMPLOYEE_PHONE_* so seed / stale trip phones never dial.
   const withPhones = applyDirectoryPhones(trip.travelers);
-  // Test mode (no real calls) can run without E.164 phones; live mode cannot.
+  // Preview (no real calls) can run without E.164 phones; live mode cannot.
   const travelers =
-    vocalBridgeModeLabel() === "test"
+    vocalBridgeModeLabel() === "preview"
       ? withPhones.filter((t) => t.name)
       : withPhones.filter((t) => t.phone);
   if (withPhones.length > 0) {
@@ -24,7 +24,7 @@ export async function startSwarm() {
       {
         error:
           vocalBridgeModeLabel() === "live"
-            ? "No travelers with phones — set EMPLOYEE_PHONE_* or switch Voice to TEST"
+            ? "No travelers with phones — set EMPLOYEE_PHONE_* first"
             : "No travelers on the trip — import a CEO email first",
       },
       { status: 400 }
@@ -48,7 +48,6 @@ export async function startSwarm() {
       mode: result.mode ?? vocalBridgeModeLabel(),
       calls: result.calls,
       travelerCount: travelers.length,
-      booked: result.booked,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Swarm failed";

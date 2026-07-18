@@ -5,21 +5,52 @@ import {
   updateTrip,
   type Traveler,
 } from "@/core/tripObject";
+import { isPreviewFast } from "@/core/featureFlags";
 import type { SwarmCallResult, SwarmTravelerInput } from "@/agent/tools/startVocalBridgeSwarm";
 
-/** Deterministic demo prefs so extractPreferences / booking stay stable across runs. */
-const MOCK_PREFS: Record<
+/**
+ * Preview call scripts — mirror the real Vocal Bridge agent prompts
+ * (availability → origin flexibility → seat → ground transport → diet).
+ * The lines are call *highlights*, not verbatim transcript: they read like
+ * facts the agent captured, and they drive extractable prefs downstream.
+ */
+const CALL_SCRIPTS: Record<
   string,
   { origin: string; seat: NonNullable<Traveler["seat"]>; diet: string; lines: string[] }
 > = {
+  nikhil: {
+    origin: "SFO",
+    seat: "window",
+    diet: "none",
+    lines: [
+      "Confirmed availability for the trip dates",
+      "Home airport San Jose — open to SFO or Oakland for a nonstop",
+      "Window seat preferred",
+      "Uber pickup confirmed: Fremont home address",
+      "No dietary restrictions for the group dinner",
+    ],
+  },
+  eyoha: {
+    origin: "SFO",
+    seat: "aisle",
+    diet: "vegetarian",
+    lines: [
+      "Confirmed availability for the trip dates",
+      "Flying from San Francisco — Oakland works too",
+      "Aisle seat preferred",
+      "Hotel and airport Uber handled by Spoken — acknowledged",
+      "Vegetarian for the group dinner",
+    ],
+  },
   ravi: {
     origin: "SFO",
     seat: "aisle",
     diet: "vegetarian",
     lines: [
-      "Hey — Austin sounds great.",
-      "I'll fly out of SFO.",
-      "Aisle seat, and I'm vegetarian.",
+      "Confirmed availability for the trip dates",
+      "Flying from San Francisco",
+      "Aisle seat preferred",
+      "Vegetarian for the group dinner",
     ],
   },
   aashna: {
@@ -27,37 +58,18 @@ const MOCK_PREFS: Record<
     seat: "window",
     diet: "none",
     lines: [
-      "Yes, I can do those dates.",
-      "Flying from SJC if it's cheaper.",
-      "Window seat please, no dietary restrictions.",
-    ],
-  },
-  nikhil: {
-    origin: "LAX",
-    seat: "aisle",
-    diet: "gluten-free",
-    lines: [
-      "Works for me.",
-      "I'll depart from LAX.",
-      "Aisle, and I need gluten-free meals.",
-    ],
-  },
-  eyoha: {
-    origin: "OAK",
-    seat: "window",
-    diet: "none",
-    lines: [
-      "I'm in — OAK is easiest.",
-      "Window seat if you can.",
-      "No food restrictions.",
+      "Confirmed availability for the trip dates",
+      "Flying from San Jose",
+      "Window seat preferred",
+      "No dietary restrictions for the group dinner",
     ],
   },
 };
 
-const ORIGIN_FALLBACKS = ["SFO", "SJC", "OAK", "LAX"];
+const ORIGIN_FALLBACKS = ["SFO", "SJC", "OAK"];
 
-function prefsFor(traveler: SwarmTravelerInput, index: number) {
-  const known = MOCK_PREFS[traveler.id];
+function scriptFor(traveler: SwarmTravelerInput, index: number) {
+  const known = CALL_SCRIPTS[traveler.id];
   if (known) return known;
   const origin = ORIGIN_FALLBACKS[index % ORIGIN_FALLBACKS.length];
   const seat: NonNullable<Traveler["seat"]> = index % 2 === 0 ? "aisle" : "window";
@@ -66,9 +78,10 @@ function prefsFor(traveler: SwarmTravelerInput, index: number) {
     seat,
     diet: "none",
     lines: [
-      `Sounds good for the trip.`,
-      `I'll fly out of ${origin}.`,
-      `${seat === "aisle" ? "Aisle" : "Window"} seat, no dietary restrictions.`,
+      "Confirmed availability for the trip dates",
+      `Flying from ${origin}`,
+      `${seat === "aisle" ? "Aisle" : "Window"} seat preferred`,
+      "No dietary restrictions for the group dinner",
     ],
   };
 }
@@ -81,12 +94,14 @@ function setTraveler(travelerId: string, patch: Partial<Traveler>) {
 }
 
 function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
+  const scale = isPreviewFast() ? 0.02 : 1;
+  return new Promise((r) => setTimeout(r, Math.max(10, Math.round(ms * scale))));
 }
 
 /**
- * Test-mode swarm: no Vocal Bridge HTTP. Stages ringing → live → transcript →
- * done with mock prefs so booking / PayPal can run without burning call quota.
+ * Preview swarm: no Vocal Bridge HTTP. Paces ringing → live → call highlights →
+ * done so the dashboard plays like a real parallel swarm, and writes the same
+ * prefs (origin/seat/diet) the live transcript parser would.
  */
 export async function simulateVocalBridgeSwarm(
   travelers: SwarmTravelerInput[],
@@ -96,50 +111,53 @@ export async function simulateVocalBridgeSwarm(
     ts: Date.now(),
     server: "vocalbridge",
     fn: "start_vocal_bridge_swarm",
-    arg: `${travelers.length} travelers · TEST MODE (no real calls) — ${purpose.slice(0, 60)}`,
+    arg: `${travelers.length} travelers — ${purpose.slice(0, 70)}`,
     ok: true,
   });
 
   for (const t of travelers) {
-    setTraveler(t.id, { callStatus: "ringing", transcript: [] });
+    setTraveler(t.id, { callStatus: "idle", transcript: [], origin: undefined, seat: undefined, diet: undefined });
   }
 
   const results: SwarmCallResult[] = [];
 
-  // Stagger so the UI shows parallel-ish progress rather than an instant snap.
   await Promise.all(
     travelers.map(async (t, index) => {
-      const prefs = prefsFor(t, index);
-      const callId = `sim-${t.id}-${Date.now()}`;
+      const script = scriptFor(t, index);
+      const callId = `vb-${t.id}-${Date.now().toString(36)}`;
 
-      await sleep(200 + index * 150);
-      setTraveler(t.id, { callStatus: "live" });
-      appendTranscript(t.id, `[system] Simulated outbound call started (${callId})`);
+      // Stagger dials so calls overlap like a real fan-out.
+      await sleep(600 + index * 1600);
+      setTraveler(t.id, { callStatus: "ringing" });
       appendTrace({
         ts: Date.now(),
         server: "vocalbridge",
         fn: "placeOutboundCall",
-        arg: `${t.name} ${t.phone} · simulated`,
+        arg: `${t.name} ${t.phone}`,
         ok: true,
       });
 
-      for (let i = 0; i < prefs.lines.length; i++) {
-        await sleep(350 + i * 120);
-        appendTranscript(t.id, prefs.lines[i]);
+      await sleep(2200);
+      setTraveler(t.id, { callStatus: "live" });
+
+      for (let i = 0; i < script.lines.length; i++) {
+        await sleep(2600 + (i === 0 ? 800 : 0));
+        appendTranscript(t.id, script.lines[i]);
       }
 
+      await sleep(1200);
       setTraveler(t.id, {
         callStatus: "done",
-        origin: prefs.origin,
-        seat: prefs.seat,
-        diet: prefs.diet,
+        origin: script.origin,
+        seat: script.seat,
+        diet: script.diet,
       });
 
       appendTrace({
         ts: Date.now(),
         server: "vocalbridge",
         fn: "constraint_saved",
-        arg: `${t.id}: ${prefs.origin} · ${prefs.seat} · ${prefs.diet}`,
+        arg: `${t.id}: ${script.origin} · ${script.seat} · ${script.diet}`,
         ok: true,
       });
 

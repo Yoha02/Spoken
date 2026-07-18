@@ -5,8 +5,8 @@
 export type FeatureFlags = {
   /**
    * When true, Start swarm / import auto-swarm places real Vocal Bridge calls.
-   * When false (test mode), the swarm simulates call transcripts + prefs and
-   * continues into a mock booking so PayPal can be exercised.
+   * When false (preview), the swarm plays the paced server-side timeline:
+   * call highlights + prefs, then staged Sabre shop/book → PayPal-ready.
    */
   vocalBridgeCallsEnabled: boolean;
 };
@@ -29,7 +29,7 @@ function envBool(name: string, defaultValue: boolean): boolean {
 /** Defaults from env. Real calls default OFF so limited Vocal Bridge quota is safe. */
 export function envFeatureFlags(): FeatureFlags {
   return {
-    // VOCALBRIDGE_CALLS_ENABLED=true → real dials. Unset / false → test mode.
+    // VOCALBRIDGE_CALLS_ENABLED=true → real dials. Unset / false → preview.
     vocalBridgeCallsEnabled: envBool("VOCALBRIDGE_CALLS_ENABLED", false),
   };
 }
@@ -57,7 +57,15 @@ export function isVocalBridgeCallsEnabled(): boolean {
   return getFeatureFlags().vocalBridgeCallsEnabled;
 }
 
-/** Human label for logs / UI. */
-export function vocalBridgeModeLabel(): "live" | "test" {
-  return isVocalBridgeCallsEnabled() ? "live" : "test";
+/** Human label for logs / UI. Preview = server-simulated calls + booking. */
+export function vocalBridgeModeLabel(): "live" | "preview" {
+  return isVocalBridgeCallsEnabled() ? "live" : "preview";
+}
+
+/**
+ * PREVIEW_FAST=true collapses preview pacing to ~instant — handy while
+ * iterating on the PayPal flow without sitting through the paced timeline.
+ */
+export function isPreviewFast(): boolean {
+  return envBool("PREVIEW_FAST", false);
 }

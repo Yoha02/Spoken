@@ -100,8 +100,8 @@ export function PaymentGate({
 
         {hasSplit && (
           <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted">
-            PayPal checkout links created per traveler. Open each link and complete payment with a
-            sandbox personal buyer account — status flips to paid only after capture.
+            PayPal checkout links created per traveler. Each status flips to paid the moment
+            that traveler completes checkout.
           </p>
         )}
 

@@ -24,15 +24,19 @@ const LABELS: Record<string, (arg: string, ok: boolean) => string> = {
   "vocalbridge.start_vocal_bridge_swarm": (arg, ok) =>
     ok ? `Vocal Bridge swarm started — ${arg}` : `Vocal Bridge swarm skipped — ${arg}`,
   "vocalbridge.placeOutboundCall": (arg, ok) =>
-    ok
-      ? arg.includes("simulated")
-        ? `Simulated call — ${arg}`
-        : `Vocal Bridge calling ${arg}`
-      : `Vocal Bridge call failed — ${arg}`,
+    ok ? `Vocal Bridge calling ${arg}` : `Vocal Bridge call failed — ${arg}`,
   "vocalbridge.constraint_saved": (arg) => `Constraint saved — ${arg}`,
   "sabre.getSabreToken": (_arg, ok) => (ok ? "Sabre: authenticated" : "Sabre: auth failed"),
-  "sabre.mockBook": (arg, ok) =>
-    ok ? `Demo booking locked — ${arg}` : `Demo booking failed — ${arg}`,
+  "sabre.shopFlights": (arg, ok) =>
+    ok ? `Sabre flight search — ${arg}` : `Sabre flight search failed — ${arg}`,
+  "sabre.shopHotels": (arg, ok) =>
+    ok ? `Sabre hotel search — ${arg}` : `Sabre hotel search failed — ${arg}`,
+  "sabre.createBooking": (arg, ok) =>
+    ok ? `Sabre booking confirmed — ${arg}` : `Sabre booking failed — ${arg}`,
+  "uber.scheduleRide": (arg, ok) =>
+    ok ? `Uber scheduled — ${arg}` : `Uber scheduling failed — ${arg}`,
+  "opentable.reserve": (arg, ok) =>
+    ok ? `Dinner reserved — ${arg}` : `Dinner reservation failed — ${arg}`,
   "paypal.splitPayment": (arg, ok) =>
     ok ? `PayPal split sent — ${arg}` : `PayPal split failed — ${arg}`,
   "paypal.createOrder": (arg, ok) =>

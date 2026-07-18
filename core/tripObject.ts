@@ -20,10 +20,12 @@ export type Leg =
       rooms: number; price: number; status: "proposed" | "booked" }
   | { type: "dinner"; place: string; time: string; partySize: number;
       notes?: string; status: "calling" | "booked" | "failed" }
-  | { type: "ride"; note: string; status: "proposed" | "booked" };
+  | { type: "ride"; note: string; price?: number; status: "proposed" | "booked" };
 
 export type TripObject = {
   sessionId: string;
+  /** "preview" when the current run is server-simulated; "live" for real calls. */
+  mode?: "live" | "preview";
   dest: string;          // "AUS"
   dateRange: [string, string];
   budgetPerPerson: number;
@@ -109,6 +111,32 @@ export function appendTranscript(travelerId: string, line: string): TripObject {
 
 export function appendTrace(entry: { ts: number; server: string; fn: string; arg: string; ok: boolean }): TripObject {
   trip.toolTrace.push(entry);
+  notify();
+  return trip;
+}
+
+/**
+ * Fresh take: clears everything a demo run produces (legs, costs, payment
+ * split, tool feed, call state/prefs on travelers) while keeping the roster.
+ * Called whenever a new extract/trigger comes in so every recording starts clean.
+ */
+export function resetTripForRun(): TripObject {
+  trip.dest = "";
+  trip.dateRange = ["", ""];
+  trip.budgetPerPerson = 0;
+  trip.legs = [];
+  trip.totalCost = 0;
+  trip.split = undefined;
+  trip.toolTrace = [];
+  trip.mode = undefined;
+  trip.travelers = trip.travelers.map((t) => ({
+    ...t,
+    origin: undefined,
+    seat: undefined,
+    diet: undefined,
+    callStatus: "idle",
+    transcript: [],
+  }));
   notify();
   return trip;
 }

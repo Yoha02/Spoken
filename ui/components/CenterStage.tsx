@@ -84,6 +84,17 @@ export function CenterStage({ trip, phase }: { trip: TripObject; phase: TripPhas
     );
   }
 
+  if (phase === "paid") {
+    return (
+      <div className="animate-pop-in flex h-full flex-col items-center justify-center rounded-2xl border-2 border-success bg-panel p-8 text-center">
+        <span className="font-display text-6xl uppercase tracking-tight text-success">Trip confirmed</span>
+        <p className="mt-4 max-w-md font-mono text-lg leading-relaxed text-paper">
+          Payments received. Every team member will get their confirmation by email.
+        </p>
+      </div>
+    );
+  }
+
   if (phase === "rebooked" || phase === "booked") {
     return (
       <div className="animate-pop-in flex h-full flex-col items-center justify-center rounded-2xl border-2 border-success bg-panel p-8">

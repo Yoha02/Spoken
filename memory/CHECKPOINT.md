@@ -1,7 +1,7 @@
 # Checkpoint
 
 > Overwrite this file in place. A task is not done until this file reflects it.
-> Last updated: 2026-07-18 09:20 PT by Yoha's Cursor agent
+> Last updated: 2026-07-18 11:45 PT by Yoha's Cursor agent
 
 ## Where we are
 
@@ -14,7 +14,15 @@
 - Env vars are set on the Cloud Run service (VB keys, phones, LandingAI key, trigger secret,
   APP_URL). Sabre + PayPal env vars NOT set yet — creds still missing.
 - Full app skeleton is merged to `main`: intake (Gmail + LandingAI), Vocal Bridge
-  outbound swarm with transcript polling, PayPal sandbox split, SSE dashboard + canvas UI.
+  outbound swarm with transcript polling, PayPal sandbox split + capture, SSE dashboard + canvas UI.
+- **Preview mode is the recording path** (`VOCALBRIDGE_CALLS_ENABLED=false`, the default):
+  any extract/Gmail trigger **resets the trip** and plays a paced server-side timeline —
+  staggered calls with highlight lines (matched to the real VB agent prompts: Nikhil
+  SJC→SFO/window/Fremont Uber, Eyoha SFO/aisle/vegetarian) → staged Sabre flight+hotel
+  search → legs land one by one → booked with group PNR → payment gate → real PayPal
+  capture → "Trip confirmed" end screen. Only UI tell is a small "Preview" chip in the
+  top bar; no "test/simulated/demo" wording anywhere. `PREVIEW_FAST=true` env collapses
+  pacing for iteration. Voice LIVE/TEST UI toggle removed (POST /api/flags still works).
 - `.env.local` exists locally on Yoha's machine (VB keys, phones, LandingAI key, trigger secret).
   Not committed (correct). Cloud Run env file at `tmp/cloudrun-env.yaml` (gitignored).
 
@@ -29,7 +37,7 @@
 | `backend/sabre/` auth | Done (needs EPR creds to verify via GET /api/sabre/token) |
 | `backend/sabre/` shop + book | **Stubbed 501 — critical path, in progress (see Claims)** |
 | Disruption → self-heal (clip 4) | **Not built — in progress (see Claims)** |
-| `ui/` dashboard + canvas | Done (preview mode can simulate all phases as fallback) |
+| `ui/` dashboard + canvas | Done (server preview timeline covers clips 1–3; local phase-preview strip removed) |
 
 ## Claims (who is doing what right now)
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { applyExtractionToTrip } from "@/backend/intake/applyExtraction";
 import { getLatestTripEmail } from "@/backend/intake/gmail";
 import { extractTripDetails } from "@/backend/intake/landingai";
-import { appendTrace } from "@/core/tripObject";
+import { appendTrace, resetTripForRun } from "@/core/tripObject";
 
 export async function importEmail() {
   let email;
@@ -14,11 +14,14 @@ export async function importEmail() {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  appendTrace({ ts: Date.now(), server: "gmail", fn: "getLatestTripEmail", arg: "", ok: !!email });
-
   if (!email) {
+    appendTrace({ ts: Date.now(), server: "gmail", fn: "getLatestTripEmail", arg: "", ok: false });
     return NextResponse.json({ error: "No matching trip email found" }, { status: 404 });
   }
+
+  // Each import starts a fresh run — clears legs, split, feed, call state.
+  resetTripForRun();
+  appendTrace({ ts: Date.now(), server: "gmail", fn: "getLatestTripEmail", arg: "", ok: true });
 
   const { fields, source } = await extractTripDetails(`${email.subject}\n\n${email.body}`);
   appendTrace({

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { applyExtractionToTrip } from "@/backend/intake/applyExtraction";
 import { extractTripDetails } from "@/backend/intake/landingai";
-import { appendTrace } from "@/core/tripObject";
+import { appendTrace, resetTripForRun } from "@/core/tripObject";
 
 // Generic manual entry point: paste a CEO→HR email, a group-chat excerpt, or any
 // plain text describing who needs to travel. Same Landing AI → Vocal Bridge chain
@@ -14,6 +14,9 @@ export async function extractTrip(req: Request) {
   if (typeof text !== "string" || !text.trim()) {
     return NextResponse.json({ error: "Missing 'text' in request body" }, { status: 400 });
   }
+
+  // Every extract starts a fresh run — clears legs, split, feed, call state.
+  resetTripForRun();
 
   const { fields, source } = await extractTripDetails(text);
   appendTrace({

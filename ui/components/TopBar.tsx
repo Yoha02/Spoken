@@ -10,9 +10,14 @@ export function TopBar({ trip, phase }: { trip: TripObject; phase: TripPhase }) 
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-hairline pb-5">
       <div>
-        <h1 className="font-display text-2xl uppercase tracking-tight text-paper">
+        <h1 className="flex items-center gap-3 font-display text-2xl uppercase tracking-tight text-paper">
           Swarm Mode
           {trip.dest && <span className="text-amber"> · {trip.dest}</span>}
+          {trip.mode === "preview" && (
+            <span className="rounded border border-muted/50 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted">
+              Preview
+            </span>
+          )}
         </h1>
         <p className="mt-1 font-mono text-xs text-muted">
           {trip.dateRange[0] ? `${trip.dateRange[0]} → ${trip.dateRange[1]}` : "Dates pending"}

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { applyExtractionToTrip } from "@/backend/intake/applyExtraction";
 import { assertTriggerSecret } from "@/backend/intake/triggerSecret";
 import { extractTripDetails } from "@/backend/intake/landingai";
-import { appendTrace } from "@/core/tripObject";
+import { appendTrace, resetTripForRun } from "@/core/tripObject";
 
 /**
  * Gmail add-on entry point: HR clicks "Start travel swarm" on the open CEO email.
@@ -26,6 +26,9 @@ export async function triggerFromGmail(req: Request) {
       { status: 400 }
     );
   }
+
+  // Each add-on trigger starts a fresh run — clears legs, split, feed, call state.
+  resetTripForRun();
 
   appendTrace({
     ts: Date.now(),
