@@ -8,7 +8,12 @@
 - Deadline: **demo video submitted by 3:00 PM PT today** (~3 min, 4 clips — see `memory/strategy.md`).
 - **LIVE ON CLOUD RUN: <https://spoken-287927050303.us-west1.run.app>** (project `spoken-502815`,
   region us-west1, service `spoken`, single instance min=max=1, 3600s timeout for SSE).
-  Deployed from `main` @ `32f1d19`. Redeploy: `gcloud run deploy spoken --source . --region us-west1`.
+  Deployed from `main` @ `48ff251` (rev spoken-00005-2xb) — includes preview pacing, Extract-reset,
+  corporate PayPal billing, Trip Guardian, and PayPal sandbox creds in the service env.
+  Redeploy: `gcloud run deploy spoken --source . --region us-west1 --env-vars-file tmp/cloudrun-env.yaml`.
+- **Hidden recording helper**: clicking the "Total vs. budget" label (top right) places a REAL
+  Vocal Bridge call to Yoha's phone — works in dev and prod regardless of preview mode.
+  Endpoint: `POST /api/vb-live-call`. No visual affordance by design.
 - Smoke-tested live: dashboard + canvas 200; `POST /api/gmail/trigger` returns 200 with
   **`source: "landingai"` (real LandingAI extraction working)**; travelers resolve; VB env vars set.
 - Env vars are set on the Cloud Run service (VB keys, phones, LandingAI key, trigger secret,
@@ -64,8 +69,7 @@
 4. Configure both VB agents with the interview prompt, outbound enabled, one test call.
 5. Record clips (order: 2 → 1 → 3 → 4); dashboard preview mode is the fallback for any clip.
 6. After any code change that a clip depends on: redeploy to Cloud Run and note the SHA here.
-   **Pending: Cloud Run is still on `32f1d19` — redeploy needed to pick up preview pacing,
-   Extract-reset, and corporate PayPal changes before recording from the hosted URL.**
+   Currently deployed: `48ff251` (all recording-path features included).
 
 ## Blocked on humans
 
