@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+Follow the agent protocol in `AGENTS.md`: read `memory/CHECKPOINT.md` (state, claims,
+next steps) before starting work, and update it before finishing. A task is not done
+until the checkpoint reflects it. Record non-obvious choices in `memory/decisions/`.

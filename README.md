@@ -1,5 +1,9 @@
 # Swarm Mode
 
+> **Agents & new contributors:** read [`AGENTS.md`](AGENTS.md) first, then
+> [`memory/CHECKPOINT.md`](memory/CHECKPOINT.md) for current state, in-flight claims,
+> and next steps. Update the checkpoint before you finish.
+
 Voice-AI travel hackathon demo. A trip-planning email kicks things off, four
 simultaneous voice calls fill in the details, and it all plays out live on an
 organizer panel and a big-screen "canvas" view for the room.
