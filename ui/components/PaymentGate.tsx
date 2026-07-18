@@ -16,13 +16,23 @@ export function PaymentGate({
   error: string | null;
 }) {
   const hasSplit = !!trip.split && trip.split.length > 0;
-  const billableTotal =
-    trip.totalCost > 0
-      ? trip.totalCost
-      : trip.budgetPerPerson > 0
-        ? trip.budgetPerPerson * trip.travelers.length
-        : 0;
-  const perPerson = trip.travelers.length > 0 ? billableTotal / trip.travelers.length : 0;
+  const n = trip.travelers.length;
+  const fromLegs = trip.legs.reduce((sum, leg) => {
+    if (leg.type === "flight" || leg.type === "hotel") {
+      return sum + (typeof leg.price === "number" ? leg.price : 0);
+    }
+    return sum;
+  }, 0);
+  const fromBudget = trip.budgetPerPerson > 0 && n > 0 ? trip.budgetPerPerson * n : 0;
+  let fromCost = trip.totalCost > 0 ? trip.totalCost : 0;
+  if (fromCost > 0 && n > 1 && trip.budgetPerPerson > 0) {
+    if (Math.abs(fromCost - trip.budgetPerPerson) < 0.02) {
+      fromCost = trip.budgetPerPerson * n;
+    }
+  }
+  const splitSum = hasSplit && trip.split ? trip.split.reduce((s, r) => s + r.amount, 0) : 0;
+  const billableTotal = Math.max(fromLegs, fromCost, fromBudget, splitSum);
+  const perPerson = n > 0 ? billableTotal / n : 0;
   const approveUrl = trip.split?.find((s) => s.approveUrl)?.approveUrl;
 
   if (confirming) {

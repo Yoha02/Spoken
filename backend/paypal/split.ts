@@ -14,13 +14,52 @@ function money(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 
-/** Prefer booked total; fall back to budget × travelers for demo before Sabre fills totalCost. */
-function resolveBillableTotal(trip: TripObject): number {
-  if (trip.totalCost > 0) return trip.totalCost;
-  if (trip.budgetPerPerson > 0 && trip.travelers.length > 0) {
-    return trip.budgetPerPerson * trip.travelers.length;
+function moneyRound(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function sumLegPrices(trip: TripObject): number {
+  let sum = 0;
+  for (const leg of trip.legs) {
+    if (leg.type === "flight" || leg.type === "hotel") {
+      sum += typeof leg.price === "number" ? leg.price : 0;
+    }
   }
-  return 0;
+  return moneyRound(sum);
+}
+
+/**
+ * Full group total — never a single traveler share when n > 1.
+ * Prefer booked legs, then totalCost (with per-person guard), then budget × headcount.
+ */
+function resolveBillableTotal(trip: TripObject, clientHint?: number): number {
+  const n = trip.travelers.length;
+  const fromLegs = sumLegPrices(trip);
+  const fromBudget =
+    trip.budgetPerPerson > 0 && n > 0 ? moneyRound(trip.budgetPerPerson * n) : 0;
+
+  let fromCost = trip.totalCost > 0 ? moneyRound(trip.totalCost) : 0;
+  if (fromCost > 0 && n > 1 && trip.budgetPerPerson > 0) {
+    if (Math.abs(fromCost - trip.budgetPerPerson) < 0.02) {
+      fromCost = moneyRound(trip.budgetPerPerson * n);
+    }
+  }
+  if (fromCost > 0 && n > 1 && fromLegs > 0) {
+    const per = moneyRound(fromLegs / n);
+    if (Math.abs(fromCost - per) < 0.02) fromCost = fromLegs;
+  }
+
+  let hint =
+    typeof clientHint === "number" && Number.isFinite(clientHint) && clientHint > 0
+      ? moneyRound(clientHint)
+      : 0;
+  if (hint > 0 && n > 1 && trip.budgetPerPerson > 0) {
+    if (Math.abs(hint - trip.budgetPerPerson) < 0.02) {
+      hint = moneyRound(trip.budgetPerPerson * n);
+    }
+  }
+
+  return Math.max(fromLegs, fromCost, fromBudget, hint);
 }
 
 function equalShares(total: number, count: number): number[] {
@@ -31,12 +70,22 @@ function equalShares(total: number, count: number): number[] {
   return Array.from({ length: count }, (_, i) => (base + (i < rem ? 1 : 0)) / 100);
 }
 
+/** Prefer browser origin (local vs prod), then APP_URL, then localhost. */
+function resolveAppBase(returnBase?: string): string {
+  const fromClient = (returnBase || "").trim().replace(/\/$/, "");
+  if (fromClient && /^https?:\/\//i.test(fromClient)) {
+    return fromClient;
+  }
+  return (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+}
+
 async function createCorporateOrder(input: {
   total: number;
   dest: string;
   travelerCount: number;
+  returnBase?: string;
 }): Promise<{ orderId: string; approveUrl?: string; status: string }> {
-  const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const appUrl = resolveAppBase(input.returnBase);
   const value = money(input.total);
 
   const order = await paypalFetch<CreateOrderResponse>("/v2/checkout/orders", {
@@ -46,7 +95,10 @@ async function createCorporateOrder(input: {
       purchase_units: [
         {
           reference_id: "corporate-trip",
-          description: `Corporate travel — ${input.dest || "company trip"} — ${input.travelerCount} travelers`.slice(0, 127),
+          description: `Corporate travel — ${input.dest || "company trip"} — ${input.travelerCount} travelers`.slice(
+            0,
+            127
+          ),
           custom_id: "corporate-trip",
           amount: {
             currency_code: "USD",
@@ -78,23 +130,34 @@ async function createCorporateOrder(input: {
 
 /**
  * HR expense gate: "Authorize payment".
- * This is a corporate account paying the whole trip — travelers are never
- * charged. Creates ONE PayPal Checkout order for the full total; the split
- * rows are the per-traveler expense breakdown and all share that order, so
- * they flip to "paid" together when the corporate checkout captures.
+ * Corporate account pays the whole trip — one Checkout order for the full total.
  *
- * Optional JSON body: `{ totalCost?: number }` — used when the live trip
- * does not yet have a booked total (e.g. preview/demo with final totals).
+ * Optional JSON body: `{ totalCost?: number, returnBase?: string }`.
  */
 export async function splitPayment(req: Request) {
   let bodyTotal: number | undefined;
+  let returnBase: string | undefined;
   try {
-    const body = (await req.json()) as { totalCost?: unknown };
+    const body = (await req.json()) as { totalCost?: unknown; returnBase?: unknown };
     if (typeof body.totalCost === "number" && Number.isFinite(body.totalCost) && body.totalCost > 0) {
       bodyTotal = body.totalCost;
     }
+    if (typeof body.returnBase === "string" && body.returnBase.trim()) {
+      returnBase = body.returnBase.trim();
+    }
   } catch {
     // Empty body is fine for live trips that already have totals.
+  }
+
+  if (!returnBase) {
+    const origin = req.headers.get("origin") || req.headers.get("referer");
+    if (origin) {
+      try {
+        returnBase = new URL(origin).origin;
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   const trip = getTrip();
@@ -104,19 +167,7 @@ export async function splitPayment(req: Request) {
     return NextResponse.json({ error: "No travelers on the trip" }, { status: 400 });
   }
 
-  if (trip.split && trip.split.length > 0) {
-    return NextResponse.json(
-      { error: "Payment already authorized", split: trip.split },
-      { status: 409 }
-    );
-  }
-
-  // Prefer client-provided final total when the in-memory trip has none yet.
-  if (bodyTotal && trip.totalCost <= 0) {
-    updateTrip({ totalCost: bodyTotal });
-  }
-
-  const total = resolveBillableTotal(getTrip());
+  const total = resolveBillableTotal(trip, bodyTotal);
   if (total <= 0) {
     return NextResponse.json(
       {
@@ -127,9 +178,34 @@ export async function splitPayment(req: Request) {
     );
   }
 
-  // Sync totalCost if we only had budget so the UI matches the charge.
-  if (getTrip().totalCost <= 0) {
+  if (getTrip().totalCost !== total) {
     updateTrip({ totalCost: total });
+  }
+
+  // Reuse existing corporate order if still open and amount matches.
+  if (trip.split && trip.split.length > 0) {
+    const existingTotal = moneyRound(trip.split.reduce((s, r) => s + r.amount, 0));
+    const alreadyPaid = trip.split.every((s) => s.paypalStatus === "paid");
+    if (alreadyPaid) {
+      return NextResponse.json(
+        { error: "Trip already paid", split: trip.split, total: existingTotal },
+        { status: 409 }
+      );
+    }
+    if (Math.abs(existingTotal - total) < 0.02 && trip.split[0]?.approveUrl) {
+      return NextResponse.json({
+        ok: true,
+        reused: true,
+        mode: paypalMode(),
+        total,
+        currency: "USD",
+        orderId: trip.split[0].orderId,
+        approveUrl: trip.split[0].approveUrl,
+        split: trip.split,
+      });
+    }
+    // Stale undercharged order — replace.
+    updateTrip({ split: undefined });
   }
 
   const amounts = equalShares(total, travelers.length);
@@ -140,19 +216,18 @@ export async function splitPayment(req: Request) {
       total,
       dest: trip.dest,
       travelerCount: travelers.length,
+      returnBase,
     });
 
-    // Per-traveler rows are the expense breakdown; they all reference the
-    // single corporate order and settle together on capture.
     const split: SplitRow[] = travelers.map((t, i) => ({
       travelerId: t.id,
       amount: amounts[i],
-      paypalStatus: "requested",
+      paypalStatus: "requested" as const,
       orderId: created.orderId,
       approveUrl: created.approveUrl,
     }));
 
-    updateTrip({ split });
+    updateTrip({ split, totalCost: total });
 
     appendTrace({
       ts: Date.now(),

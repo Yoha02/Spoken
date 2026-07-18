@@ -40,7 +40,9 @@ const LABELS: Record<string, (arg: string, ok: boolean) => string> = {
   "paypal.createOrder": (arg, ok) =>
     ok ? `PayPal order created — ${arg}` : `PayPal order failed — ${arg}`,
   "paypal.captureOrder": (arg, ok) =>
-    ok ? `PayPal payment captured — ${arg}` : `PayPal capture failed — ${arg}`,
+    ok ? `PayPal trip paid — ${arg}` : `PayPal capture failed — ${arg}`,
+  "paypal.splitPayment": (arg, ok) =>
+    ok ? `PayPal checkout ready — ${arg}` : `PayPal checkout failed — ${arg}`,
 };
 
 export function buildActionFeed(trip: TripObject): FeedItem[] {

@@ -10,17 +10,33 @@ import { SwarmStrip } from "@/ui/components/SwarmStrip";
 import { CenterStage } from "@/ui/components/CenterStage";
 import { ActionFeed } from "@/ui/components/ActionFeed";
 import { PaymentGate } from "@/ui/components/PaymentGate";
+import { TripConfirmation } from "@/ui/components/TripConfirmation";
 
 function resolveBillableTotal(trip: {
   totalCost: number;
   budgetPerPerson: number;
   travelers: { length: number };
+  legs: { type: string; price?: number }[];
 }): number {
-  if (trip.totalCost > 0) return trip.totalCost;
-  if (trip.budgetPerPerson > 0 && trip.travelers.length > 0) {
-    return trip.budgetPerPerson * trip.travelers.length;
+  const n = trip.travelers.length;
+  const fromLegs = trip.legs.reduce((sum, leg) => {
+    if (leg.type === "flight" || leg.type === "hotel") {
+      return sum + (typeof leg.price === "number" ? leg.price : 0);
+    }
+    return sum;
+  }, 0);
+  const fromBudget = trip.budgetPerPerson > 0 && n > 0 ? trip.budgetPerPerson * n : 0;
+  let fromCost = trip.totalCost > 0 ? trip.totalCost : 0;
+  if (fromCost > 0 && n > 1 && trip.budgetPerPerson > 0) {
+    if (Math.abs(fromCost - trip.budgetPerPerson) < 0.02) {
+      fromCost = trip.budgetPerPerson * n;
+    }
   }
-  return 0;
+  if (fromCost > 0 && n > 1 && fromLegs > 0) {
+    const per = fromLegs / n;
+    if (Math.abs(fromCost - per) < 0.02) fromCost = fromLegs;
+  }
+  return Math.max(fromLegs, fromCost, fromBudget);
 }
 
 export default function Dashboard() {
@@ -34,29 +50,45 @@ export default function Dashboard() {
   const [approveError, setApproveError] = useState<string | null>(null);
   const [captureNote, setCaptureNote] = useState<string | null>(null);
   const [gateDismissed, setGateDismissed] = useState(false);
+  /** Only after this session's successful PayPal return — never on bare /. */
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [capturingPayment, setCapturingPayment] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
 
   // Re-arm the gate whenever we leave the payment phase (fresh run or paid).
   useEffect(() => {
     if (phase !== "awaiting_payment") setGateDismissed(false);
   }, [phase]);
 
-  // After HR finishes the corporate PayPal checkout they land on
-  // /?paypal=return&token=ORDER_ID. Capture the order — only real captures
-  // flip the breakdown to paid.
+  // Confirmation ONLY after PayPal redirect. Plain / always shows mission control.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const paypal = params.get("paypal");
     const token = params.get("token");
-    if (paypal !== "return" || !token) {
-      if (paypal === "cancel") {
-        setCaptureNote("PayPal checkout cancelled — payment not captured.");
-        window.history.replaceState({}, "", window.location.pathname);
-      }
+    const justConfirmed = params.get("confirmed") === "1";
+
+    if (justConfirmed && sessionStorage.getItem("paypalJustPaid") === "1") {
+      setShowConfirmation(true);
+      return;
+    }
+    if (justConfirmed && sessionStorage.getItem("paypalJustPaid") !== "1") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    if (paypal === "cancel") {
+      setCaptureNote("PayPal checkout cancelled — payment not captured.");
+      window.history.replaceState({}, "", window.location.pathname);
       return;
     }
 
+    if (paypal !== "return" || !token) return;
+
     let cancelled = false;
+    setShowConfirmation(true);
+    setCapturingPayment(true);
+    setCaptureError(null);
+
     (async () => {
       try {
         const res = await fetch("/api/paypal/capture", {
@@ -67,19 +99,22 @@ export default function Dashboard() {
         const body = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (!res.ok) throw new Error(body.error ?? `Capture failed (${res.status})`);
+        sessionStorage.setItem("paypalJustPaid", "1");
         setCaptureNote(
           body.allPaid
             ? "Corporate payment captured — trip confirmed."
             : "PayPal payment captured."
         );
+        window.history.replaceState({}, "", "/?confirmed=1");
       } catch (err) {
         if (!cancelled) {
-          setCaptureNote(err instanceof Error ? err.message : "PayPal capture failed");
-        }
-      } finally {
-        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : "PayPal capture failed";
+          setCaptureError(msg);
+          setCaptureNote(msg);
           window.history.replaceState({}, "", window.location.pathname);
         }
+      } finally {
+        if (!cancelled) setCapturingPayment(false);
       }
     })();
 
@@ -95,15 +130,16 @@ export default function Dashboard() {
     setCaptureNote(null);
 
     try {
-      // Always create a real corporate PayPal Checkout order — never jump straight to "paid".
       const totalCost = resolveBillableTotal(trip);
       const res = await fetch("/api/paypal/split", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(totalCost > 0 ? { totalCost } : {}),
+        body: JSON.stringify({
+          ...(totalCost > 0 ? { totalCost } : {}),
+          returnBase: window.location.origin,
+        }),
       });
       const body = await res.json().catch(() => ({}));
-      // 409 = order already created — fall through so the checkout link shows.
       if (!res.ok && res.status !== 409) {
         throw new Error(body.error ?? `Request failed (${res.status})`);
       }
@@ -116,7 +152,6 @@ export default function Dashboard() {
       await new Promise((r) => setTimeout(r, 1200));
       setConfirming(false);
 
-      // Open the corporate PayPal checkout (one order covers the whole trip).
       const rows: { approveUrl?: string; paypalStatus?: string }[] = Array.isArray(body.split)
         ? body.split
         : [];
@@ -141,6 +176,46 @@ export default function Dashboard() {
     );
   }
 
+  if (showConfirmation) {
+    return (
+      <main className="bg-scanlines min-h-screen bg-bg px-6 py-8 text-paper sm:px-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted">Swarm Mode</p>
+            <p className="font-display text-lg uppercase tracking-tight text-paper">
+              {trip.dest || "Trip"} confirmed
+            </p>
+          </div>
+          <span className="rounded-full border border-success px-3 py-1 font-mono text-[11px] uppercase tracking-wide text-success">
+            {capturingPayment ? "Capturing…" : phase === "paid" ? "Paid" : "Confirming"}
+          </span>
+        </div>
+
+        <TripConfirmation
+          trip={trip}
+          capturing={capturingPayment}
+          error={captureError}
+          onBack={() => {
+            setShowConfirmation(false);
+            setCaptureError(null);
+            try {
+              sessionStorage.removeItem("paypalJustPaid");
+            } catch {
+              /* ignore */
+            }
+            window.history.replaceState({}, "", window.location.pathname);
+          }}
+        />
+
+        {captureNote && !capturingPayment && !captureError && (
+          <p className="mx-auto mt-8 max-w-lg text-center font-mono text-xs text-success">
+            {captureNote}
+          </p>
+        )}
+      </main>
+    );
+  }
+
   const gateOpen = phase === "awaiting_payment" && !gateDismissed;
   const dimmed = gateOpen;
 
@@ -150,6 +225,29 @@ export default function Dashboard() {
         <TopBar trip={trip} phase={phase} />
 
         <MissionControlStrip connected={connected} />
+
+        {phase === "paid" && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/40 bg-panel/50 px-4 py-3">
+            <p className="font-mono text-xs text-success">
+              Trip is paid. Open traveler confirmations when you want them.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.setItem("paypalJustPaid", "1");
+                } catch {
+                  /* ignore */
+                }
+                setShowConfirmation(true);
+                window.history.replaceState({}, "", "/?confirmed=1");
+              }}
+              className="rounded border border-success px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide text-success hover:bg-success/10"
+            >
+              View confirmations
+            </button>
+          </div>
+        )}
 
         <div className="mt-6 flex flex-col gap-6">
           <SwarmStrip travelers={trip.travelers} />
