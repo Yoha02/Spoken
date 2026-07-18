@@ -17,7 +17,7 @@ export default function Canvas() {
   if (!trip) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-bg">
-        <p className="font-mono text-2xl text-muted">Connecting to swarm…</p>
+        <p className="font-mono text-2xl text-muted">Connecting to swarm...</p>
       </main>
     );
   }

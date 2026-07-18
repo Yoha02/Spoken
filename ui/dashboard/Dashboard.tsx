@@ -59,7 +59,7 @@ export default function Dashboard() {
   if (!effectiveTrip) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-bg">
-        <p className="font-mono text-muted">Connecting…</p>
+        <p className="font-mono text-muted">Connecting...</p>
       </main>
     );
   }
@@ -134,7 +134,7 @@ function MissionControlStrip({ connected, previewActive }: { connected: boolean;
     return (
       <div className="mt-5 flex items-center justify-between rounded-lg border border-dashed border-amber/50 bg-panel/40 px-4 py-3">
         <p className="font-mono text-xs uppercase tracking-widest text-amber">
-          Previewing simulated data — switch to “Live” below to use real controls
+          {"Previewing simulated data - switch to \"Live\" below to use real controls"}
         </p>
         <Link href="/canvas" className="font-mono text-xs uppercase tracking-widest text-ice hover:text-paper">
           Open canvas →
@@ -159,7 +159,19 @@ function MissionControlStrip({ connected, previewActive }: { connected: boolean;
         onClick={() =>
           run(
             () => fetch("/api/import-email", { method: "POST" }),
-            (b) => `Imported "${(b.email as { subject?: string } | undefined)?.subject ?? "email"}"`
+            (b) => {
+              const subject =
+                (b.email as { subject?: string } | undefined)?.subject ?? "email";
+              const n = Array.isArray(b.travelers) ? b.travelers.length : 0;
+              const swarmOk = (b.swarm as { ok?: boolean } | undefined)?.ok;
+              const swarmPart =
+                n > 0
+                  ? swarmOk
+                    ? ` · Landing AI → Vocal Bridge calling ${n}`
+                    : ` · extracted ${n}; Vocal Bridge needs key/retry`
+                  : "";
+              return `Imported "${subject}"${swarmPart}`;
+            }
           )
         }
         disabled={busy}
@@ -171,7 +183,7 @@ function MissionControlStrip({ connected, previewActive }: { connected: boolean;
       <input
         value={pastedText}
         onChange={(e) => setPastedText(e.target.value)}
-        placeholder="…or paste trip text"
+        placeholder="...or paste trip text"
         className="min-w-[220px] flex-1 rounded border border-hairline bg-bg px-3 py-1.5 font-mono text-[11px] text-paper placeholder:text-muted focus:border-ice focus:outline-none"
       />
       <button
@@ -183,7 +195,10 @@ function MissionControlStrip({ connected, previewActive }: { connected: boolean;
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ text: pastedText }),
               }),
-            (b) => `Extracted via ${b.source as string}`
+            (b) => {
+              const n = Array.isArray(b.travelers) ? b.travelers.length : 0;
+              return `Extracted via ${b.source as string}${n ? ` · ${n} travelers → Vocal Bridge` : ""}`;
+            }
           )
         }
         disabled={busy || !pastedText.trim()}

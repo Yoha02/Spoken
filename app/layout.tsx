@@ -34,9 +34,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    // suppressHydrationWarning: browser extensions often inject attrs on <html>/<body>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body
         className={`${archivo.variable} ${archivoBlack.variable} ${plexSans.variable} ${plexMono.variable} font-sans antialiased bg-bg text-foreground`}
+        suppressHydrationWarning
       >
         {children}
       </body>
