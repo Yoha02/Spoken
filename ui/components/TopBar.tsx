@@ -1,7 +1,16 @@
+"use client";
+
 import type { TripObject } from "@/core/tripObject";
 import type { TripPhase } from "@/ui/lib/tripPhase";
 import { PhaseBadge } from "./PhaseBadge";
 import { AnimatedNumber } from "./AnimatedNumber";
+
+// Hidden recording helper: clicking the "Total vs. budget" label places a
+// REAL Vocal Bridge call to Yoha (works in dev and prod, independent of
+// preview mode). Intentionally styled as plain text — no affordance.
+function triggerLiveCall() {
+  void fetch("/api/vb-live-call", { method: "POST" }).catch(() => {});
+}
 
 export function TopBar({ trip, phase }: { trip: TripObject; phase: TripPhase }) {
   const budgetTotal = trip.budgetPerPerson * trip.travelers.length;
@@ -25,7 +34,12 @@ export function TopBar({ trip, phase }: { trip: TripObject; phase: TripPhase }) 
       </div>
       <div className="flex items-center gap-6">
         <div className="text-right">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-muted">Total vs. budget</p>
+          <p
+            onClick={triggerLiveCall}
+            className="cursor-default select-none font-mono text-[11px] uppercase tracking-widest text-muted"
+          >
+            Total vs. budget
+          </p>
           <p className={`font-mono text-lg ${overBudget ? "text-signal" : "text-paper"}`}>
             <AnimatedNumber value={trip.totalCost} prefix="$" />
             {budgetTotal > 0 && <span className="text-muted"> / ${budgetTotal}</span>}
