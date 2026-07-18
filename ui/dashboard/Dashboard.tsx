@@ -33,9 +33,16 @@ export default function Dashboard() {
   const [confirming, setConfirming] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [captureNote, setCaptureNote] = useState<string | null>(null);
+  const [gateDismissed, setGateDismissed] = useState(false);
 
-  // After a traveler finishes PayPal checkout they land on /?paypal=return&token=ORDER_ID.
-  // Capture the order and mark that share paid (only real captures flip status to paid).
+  // Re-arm the gate whenever we leave the payment phase (fresh run or paid).
+  useEffect(() => {
+    if (phase !== "awaiting_payment") setGateDismissed(false);
+  }, [phase]);
+
+  // After HR finishes the corporate PayPal checkout they land on
+  // /?paypal=return&token=ORDER_ID. Capture the order — only real captures
+  // flip the breakdown to paid.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -43,7 +50,7 @@ export default function Dashboard() {
     const token = params.get("token");
     if (paypal !== "return" || !token) {
       if (paypal === "cancel") {
-        setCaptureNote("PayPal checkout cancelled — payment still requested.");
+        setCaptureNote("PayPal checkout cancelled — payment not captured.");
         window.history.replaceState({}, "", window.location.pathname);
       }
       return;
@@ -62,8 +69,8 @@ export default function Dashboard() {
         if (!res.ok) throw new Error(body.error ?? `Capture failed (${res.status})`);
         setCaptureNote(
           body.allPaid
-            ? "All payments captured — trip confirmed."
-            : "PayPal payment captured for one traveler."
+            ? "Corporate payment captured — trip confirmed."
+            : "PayPal payment captured."
         );
       } catch (err) {
         if (!cancelled) {
@@ -88,7 +95,7 @@ export default function Dashboard() {
     setCaptureNote(null);
 
     try {
-      // Always create real PayPal Checkout orders — never jump straight to "paid".
+      // Always create a real corporate PayPal Checkout order — never jump straight to "paid".
       const totalCost = resolveBillableTotal(trip);
       const res = await fetch("/api/paypal/split", {
         method: "POST",
@@ -96,12 +103,12 @@ export default function Dashboard() {
         body: JSON.stringify(totalCost > 0 ? { totalCost } : {}),
       });
       const body = await res.json().catch(() => ({}));
-      // 409 = split already created — drop into live so real approve links show.
+      // 409 = order already created — fall through so the checkout link shows.
       if (!res.ok && res.status !== 409) {
         throw new Error(body.error ?? `Request failed (${res.status})`);
       }
       if (!res.ok && res.status === 409 && !Array.isArray(body.split)) {
-        throw new Error(body.error ?? "Split already requested");
+        throw new Error(body.error ?? "Payment already authorized");
       }
 
       setApproving(false);
@@ -109,21 +116,19 @@ export default function Dashboard() {
       await new Promise((r) => setTimeout(r, 1200));
       setConfirming(false);
 
-      // Open the first unpaid traveler's PayPal approve link (real sandbox checkout).
-      const rows = Array.isArray(body.split)
+      // Open the corporate PayPal checkout (one order covers the whole trip).
+      const rows: { approveUrl?: string; paypalStatus?: string }[] = Array.isArray(body.split)
         ? body.split
-        : Array.isArray(body.orders)
-          ? body.orders
-          : [];
-      const firstUrl = rows.find(
-        (r: { approveUrl?: string; paypalStatus?: string }) =>
-          r.approveUrl && r.paypalStatus !== "paid"
-      )?.approveUrl;
-      if (typeof firstUrl === "string" && firstUrl) {
-        window.open(firstUrl, "_blank", "noopener,noreferrer");
+        : [];
+      const checkoutUrl =
+        typeof body.approveUrl === "string" && body.approveUrl
+          ? body.approveUrl
+          : rows.find((r) => r.approveUrl && r.paypalStatus !== "paid")?.approveUrl;
+      if (typeof checkoutUrl === "string" && checkoutUrl) {
+        window.open(checkoutUrl, "_blank", "noopener,noreferrer");
       }
     } catch (err) {
-      setApproveError(err instanceof Error ? err.message : "Failed to request payment");
+      setApproveError(err instanceof Error ? err.message : "Failed to authorize payment");
       setApproving(false);
     }
   }
@@ -136,7 +141,8 @@ export default function Dashboard() {
     );
   }
 
-  const dimmed = phase === "awaiting_payment";
+  const gateOpen = phase === "awaiting_payment" && !gateDismissed;
+  const dimmed = gateOpen;
 
   return (
     <main className="bg-scanlines min-h-screen bg-bg px-8 py-6 text-paper">
@@ -159,14 +165,24 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {dimmed && (
+      {gateOpen && (
         <PaymentGate
           trip={trip}
           onApprove={handleApprove}
+          onDismiss={() => setGateDismissed(true)}
           approving={approving}
           confirming={confirming}
           error={approveError}
         />
+      )}
+
+      {phase === "awaiting_payment" && gateDismissed && (
+        <button
+          onClick={() => setGateDismissed(false)}
+          className="fixed bottom-6 right-6 z-40 rounded-full border border-amber bg-panel px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-amber shadow-lg transition hover:bg-amber/10"
+        >
+          Complete verification →
+        </button>
       )}
 
       {captureNote && !dimmed && (

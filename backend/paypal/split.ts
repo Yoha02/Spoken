@@ -31,14 +31,13 @@ function equalShares(total: number, count: number): number[] {
   return Array.from({ length: count }, (_, i) => (base + (i < rem ? 1 : 0)) / 100);
 }
 
-async function createCheckoutOrder(input: {
-  travelerId: string;
-  name: string;
-  amount: number;
+async function createCorporateOrder(input: {
+  total: number;
   dest: string;
+  travelerCount: number;
 }): Promise<{ orderId: string; approveUrl?: string; status: string }> {
   const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
-  const value = money(input.amount);
+  const value = money(input.total);
 
   const order = await paypalFetch<CreateOrderResponse>("/v2/checkout/orders", {
     method: "POST",
@@ -46,9 +45,9 @@ async function createCheckoutOrder(input: {
       intent: "CAPTURE",
       purchase_units: [
         {
-          reference_id: input.travelerId.slice(0, 256),
-          description: `Trip share — ${input.name} — ${input.dest || "company trip"}`.slice(0, 127),
-          custom_id: input.travelerId.slice(0, 127),
+          reference_id: "corporate-trip",
+          description: `Corporate travel — ${input.dest || "company trip"} — ${input.travelerCount} travelers`.slice(0, 127),
+          custom_id: "corporate-trip",
           amount: {
             currency_code: "USD",
             value,
@@ -78,9 +77,11 @@ async function createCheckoutOrder(input: {
 }
 
 /**
- * HR payment gate: "Approve & send requests".
- * Creates one PayPal sandbox Checkout order per traveler (equal split) and
- * marks each row paypalStatus = "requested" with an approveUrl for checkout.
+ * HR expense gate: "Authorize payment".
+ * This is a corporate account paying the whole trip — travelers are never
+ * charged. Creates ONE PayPal Checkout order for the full total; the split
+ * rows are the per-traveler expense breakdown and all share that order, so
+ * they flip to "paid" together when the corporate checkout captures.
  *
  * Optional JSON body: `{ totalCost?: number }` — used when the live trip
  * does not yet have a booked total (e.g. preview/demo with final totals).
@@ -105,7 +106,7 @@ export async function splitPayment(req: Request) {
 
   if (trip.split && trip.split.length > 0) {
     return NextResponse.json(
-      { error: "Split already requested", split: trip.split },
+      { error: "Payment already authorized", split: trip.split },
       { status: 409 }
     );
   }
@@ -135,58 +136,29 @@ export async function splitPayment(req: Request) {
   const mode = paypalMode();
 
   try {
-    const split: SplitRow[] = [];
-    const orders: {
-      travelerId: string;
-      name: string;
-      amount: number;
-      orderId: string;
-      approveUrl?: string;
-      status: string;
-    }[] = [];
+    const created = await createCorporateOrder({
+      total,
+      dest: trip.dest,
+      travelerCount: travelers.length,
+    });
 
-    for (let i = 0; i < travelers.length; i++) {
-      const t = travelers[i];
-      const amount = amounts[i];
-      const created = await createCheckoutOrder({
-        travelerId: t.id,
-        name: t.name,
-        amount,
-        dest: trip.dest,
-      });
-
-      split.push({
-        travelerId: t.id,
-        amount,
-        paypalStatus: "requested",
-        orderId: created.orderId,
-        approveUrl: created.approveUrl,
-      });
-      orders.push({
-        travelerId: t.id,
-        name: t.name,
-        amount,
-        orderId: created.orderId,
-        approveUrl: created.approveUrl,
-        status: created.status,
-      });
-
-      appendTrace({
-        ts: Date.now(),
-        server: "paypal",
-        fn: "createOrder",
-        arg: `${t.name} $${money(amount)} (${created.orderId})`,
-        ok: true,
-      });
-    }
+    // Per-traveler rows are the expense breakdown; they all reference the
+    // single corporate order and settle together on capture.
+    const split: SplitRow[] = travelers.map((t, i) => ({
+      travelerId: t.id,
+      amount: amounts[i],
+      paypalStatus: "requested",
+      orderId: created.orderId,
+      approveUrl: created.approveUrl,
+    }));
 
     updateTrip({ split });
 
     appendTrace({
       ts: Date.now(),
       server: "paypal",
-      fn: "splitPayment",
-      arg: `${travelers.length} requests · $${money(total)} total · ${mode}`,
+      fn: "createOrder",
+      arg: `corporate account · $${money(total)} (${created.orderId})`,
       ok: true,
     });
 
@@ -195,15 +167,16 @@ export async function splitPayment(req: Request) {
       mode,
       total,
       currency: "USD",
+      orderId: created.orderId,
+      approveUrl: created.approveUrl,
       split,
-      orders,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "PayPal split failed";
+    const message = err instanceof Error ? err.message : "PayPal order failed";
     appendTrace({
       ts: Date.now(),
       server: "paypal",
-      fn: "splitPayment",
+      fn: "createOrder",
       arg: message.slice(0, 120),
       ok: false,
     });

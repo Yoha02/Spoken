@@ -37,8 +37,6 @@ const LABELS: Record<string, (arg: string, ok: boolean) => string> = {
     ok ? `Uber scheduled — ${arg}` : `Uber scheduling failed — ${arg}`,
   "opentable.reserve": (arg, ok) =>
     ok ? `Dinner reserved — ${arg}` : `Dinner reservation failed — ${arg}`,
-  "paypal.splitPayment": (arg, ok) =>
-    ok ? `PayPal split sent — ${arg}` : `PayPal split failed — ${arg}`,
   "paypal.createOrder": (arg, ok) =>
     ok ? `PayPal order created — ${arg}` : `PayPal order failed — ${arg}`,
   "paypal.captureOrder": (arg, ok) =>

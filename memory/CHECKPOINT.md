@@ -1,7 +1,7 @@
 # Checkpoint
 
 > Overwrite this file in place. A task is not done until this file reflects it.
-> Last updated: 2026-07-18 11:45 PT by Yoha's Cursor agent
+> Last updated: 2026-07-18 12:00 PT by Yoha's Cursor agent
 
 ## Where we are
 
@@ -33,7 +33,7 @@
 | `core/` state + SSE | Done |
 | `backend/intake/` Gmail + LandingAI | Done (LandingAI key still missing → regex fallback fires) |
 | `agent/` VB swarm calls | Done; agents need outbound + interview prompt configured in VB dashboard |
-| `backend/paypal/` split orders | Done (needs sandbox CLIENT_ID/SECRET; no capture step — status stays "requested") |
+| `backend/paypal/` corporate checkout | Done — **reframed as corporate account**: gate is HR "Verify trip expenses" (per-traveler breakdown + total, X to dismiss, "Authorize payment"), creates ONE PayPal order for the full total; capture marks everything paid. Sandbox creds are in Yoha's `.env.local` and order creation is verified live. Still needed: sandbox buyer login to complete checkout on camera; add creds to Cloud Run env on next deploy. Confirmation emails after payment = Ravi. |
 | `backend/sabre/` auth | Done (needs EPR creds to verify via GET /api/sabre/token) |
 | `backend/sabre/` shop + book | **Stubbed 501 — critical path, in progress (see Claims)** |
 | Disruption → self-heal (clip 4) | **Not built — in progress (see Claims)** |
@@ -60,7 +60,7 @@
 ## Blocked on humans
 
 - **Sabre EPR credentials** (`SABRE_EPR_USERNAME` in `V1:<userid>:<PCC>:<domain>` format + password) — #1 blocker, from Developer Hub.
-- **PayPal sandbox** `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` (+ sandbox buyer login for on-screen approval).
+- ~~PayPal sandbox CLIENT_ID/SECRET~~ RESOLVED — in Yoha's `.env.local`, order creation verified. Still need a **sandbox buyer login** to complete checkout on camera (or pay-by-card in sandbox).
 - Video editing volunteer for the final cut.
 - ~~LandingAI key~~ RESOLVED — live and verified on Cloud Run.
 - Gmail OAuth trio — NOT needed for the add-on path; skip unless we want the dashboard "Import latest email" button.

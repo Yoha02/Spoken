@@ -13,8 +13,9 @@ type CaptureResponse = {
 };
 
 /**
- * Capture a PayPal Checkout order after the buyer approves on paypal.com.
- * Marks the matching split row paypalStatus = "paid".
+ * Capture the corporate PayPal Checkout order after HR approves on paypal.com.
+ * All breakdown rows share the one corporate order, so a successful capture
+ * marks every row paypalStatus = "paid".
  */
 export async function capturePayment(req: Request) {
   let orderId = "";
@@ -35,12 +36,12 @@ export async function capturePayment(req: Request) {
     return NextResponse.json({ error: "No payment split on this trip" }, { status: 400 });
   }
 
-  const rowIndex = split.findIndex((s) => s.orderId === orderId);
-  if (rowIndex < 0) {
+  const matching = split.filter((s) => s.orderId === orderId);
+  if (matching.length === 0) {
     return NextResponse.json({ error: `No split row for order ${orderId}` }, { status: 404 });
   }
 
-  if (split[rowIndex].paypalStatus === "paid") {
+  if (matching.every((s) => s.paypalStatus === "paid")) {
     return NextResponse.json({
       ok: true,
       alreadyPaid: true,
@@ -66,20 +67,17 @@ export async function capturePayment(req: Request) {
       throw new Error(`Unexpected capture status: ${status}${captureStatus ? `/${captureStatus}` : ""}`);
     }
 
-    const next = split.map((row, i) =>
-      i === rowIndex ? { ...row, paypalStatus: "paid" as const } : row
+    const next = split.map((row) =>
+      row.orderId === orderId ? { ...row, paypalStatus: "paid" as const } : row
     );
     updateTrip({ split: next });
 
-    const traveler =
-      trip.travelers.find((t) => t.id === split[rowIndex].travelerId)?.name ??
-      split[rowIndex].travelerId;
-
+    const total = matching.reduce((sum, row) => sum + row.amount, 0);
     appendTrace({
       ts: Date.now(),
       server: "paypal",
       fn: "captureOrder",
-      arg: `${traveler} · ${orderId}`,
+      arg: `corporate account · $${(Math.round(total * 100) / 100).toFixed(2)} · ${orderId}`,
       ok: true,
     });
 
