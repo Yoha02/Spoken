@@ -34,3 +34,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local planning / scratch artifacts (not part of the app)
+/bob-analysis/
+/output/
+/tmp/
+/vocal-bridge-prompts/
