@@ -1,0 +1,98 @@
+// lib/tripObject.ts — the single source of truth. One in-memory object per demo session.
+export type Traveler = {
+  id: string;            // "nikhil" | "priya" | "marco" | "sam"
+  name: string;
+  phone: string;         // E.164, e.g. "+14155551234"
+  origin?: string;       // IATA city, e.g. "SFO" — filled by the call
+  seat?: "aisle" | "window" | "any";
+  diet?: string;         // "vegetarian" | "gluten-free" | "none"
+  callStatus: "idle" | "ringing" | "live" | "done" | "failed";
+  transcript: string[];  // streamed lines from this traveler's call
+};
+
+export type Leg =
+  | { type: "flight"; travelerId: string; origin: string; dest: string;
+      depart: string; arrive: string; carrier: string; price: number;
+      pnr?: string; status: "proposed" | "booked" }
+  | { type: "hotel"; name: string; checkIn: string; checkOut: string;
+      rooms: number; price: number; status: "proposed" | "booked" }
+  | { type: "dinner"; place: string; time: string; partySize: number;
+      notes?: string; status: "calling" | "booked" | "failed" }
+  | { type: "ride"; note: string; status: "proposed" | "booked" };
+
+export type TripObject = {
+  sessionId: string;
+  dest: string;          // "AUS"
+  dateRange: [string, string];
+  budgetPerPerson: number;
+  travelers: Traveler[];
+  legs: Leg[];
+  totalCost: number;
+  split?: { travelerId: string; amount: number; paypalStatus: "pending" | "requested" | "paid" }[];
+  toolTrace: { ts: number; server: string; fn: string; arg: string; ok: boolean }[];
+};
+
+function seedTrip(): TripObject {
+  return {
+    sessionId: "demo-session-1",
+    // dest/dateRange/budgetPerPerson start blank — the group email fills
+    // these in via /api/import-email once it's imported.
+    dest: "",
+    dateRange: ["", ""],
+    budgetPerPerson: 0,
+    travelers: [
+      { id: "ravi", name: "Ravi", phone: "+15550000001", callStatus: "idle", transcript: [] },
+      { id: "aashna", name: "Aashna", phone: "+15550000002", callStatus: "idle", transcript: [] },
+      { id: "nikhil", name: "Nikhil", phone: "+15550000003", callStatus: "idle", transcript: [] },
+      { id: "eyoha", name: "Eyoha", phone: "+15550000004", callStatus: "idle", transcript: [] },
+    ],
+    legs: [],
+    totalCost: 0,
+    toolTrace: [],
+  };
+}
+
+// Survive Next.js dev server hot-reload by stashing the singleton on globalThis.
+const globalForTrip = globalThis as unknown as { __tripObject?: TripObject };
+
+const trip: TripObject = globalForTrip.__tripObject ?? seedTrip();
+globalForTrip.__tripObject = trip;
+
+type Listener = (trip: TripObject) => void;
+const globalForListeners = globalThis as unknown as { __tripListeners?: Set<Listener> };
+const listeners: Set<Listener> = globalForListeners.__tripListeners ?? new Set();
+globalForListeners.__tripListeners = listeners;
+
+function notify() {
+  Array.from(listeners).forEach((listener) => listener(trip));
+}
+
+export function subscribeTrip(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getTrip(): TripObject {
+  return trip;
+}
+
+export function updateTrip(patch: Partial<TripObject>): TripObject {
+  Object.assign(trip, patch);
+  notify();
+  return trip;
+}
+
+export function appendTranscript(travelerId: string, line: string): TripObject {
+  const traveler = trip.travelers.find((t) => t.id === travelerId);
+  if (traveler) {
+    traveler.transcript.push(line);
+    notify();
+  }
+  return trip;
+}
+
+export function appendTrace(entry: { ts: number; server: string; fn: string; arg: string; ok: boolean }): TripObject {
+  trip.toolTrace.push(entry);
+  notify();
+  return trip;
+}

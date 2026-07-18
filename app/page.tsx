@@ -1,101 +1,213 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useTripStream } from "@/lib/useTripStream";
+import { useDisplayPhase } from "@/lib/useDisplayPhase";
+import { buildActionFeed } from "@/lib/actionFeed";
+import { buildPreviewTrip, type PreviewKey } from "@/lib/previewTrip";
+import { TopBar } from "@/components/TopBar";
+import { SwarmStrip } from "@/components/SwarmStrip";
+import { CenterStage } from "@/components/CenterStage";
+import { ActionFeed } from "@/components/ActionFeed";
+import { PaymentGate } from "@/components/PaymentGate";
+import { PreviewControls } from "@/components/PreviewControls";
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+export default function DashboardPage() {
+  const { trip, connected } = useTripStream();
+  const [previewKey, setPreviewKey] = useState<PreviewKey | "live">("live");
+
+  const effectiveTrip = useMemo(() => {
+    if (!trip) return null;
+    return previewKey === "live" ? trip : buildPreviewTrip(previewKey, trip);
+  }, [trip, previewKey]);
+
+  const phase = useDisplayPhase(effectiveTrip);
+  const feed = effectiveTrip ? buildActionFeed(effectiveTrip) : [];
+
+  const [approving, setApproving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+
+  async function handleApprove() {
+    setApproving(true);
+    setApproveError(null);
+
+    if (previewKey !== "live") {
+      await new Promise((r) => setTimeout(r, 900));
+      setApproving(false);
+      setConfirming(true);
+      await new Promise((r) => setTimeout(r, 1400));
+      setConfirming(false);
+      setPreviewKey("paid");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/paypal/split", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Request failed (${res.status})`);
+      }
+    } catch (err) {
+      setApproveError(err instanceof Error ? err.message : "Failed to request payment");
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  if (!effectiveTrip) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-bg">
+        <p className="font-mono text-muted">Connecting…</p>
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+    );
+  }
+
+  const dimmed = phase === "awaiting_payment";
+
+  return (
+    <main className="bg-scanlines min-h-screen bg-bg px-8 py-6 text-paper">
+      <div className={`transition-all duration-300 ${dimmed ? "pointer-events-none scale-[0.99] opacity-30 blur-[1px]" : ""}`}>
+        <TopBar trip={effectiveTrip} phase={phase} />
+
+        <MissionControlStrip
+          connected={connected}
+          previewActive={previewKey !== "live"}
+        />
+
+        <div className="mt-6 flex flex-col gap-6">
+          <SwarmStrip travelers={effectiveTrip.travelers} />
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
+            <div className="h-[440px]">
+              <CenterStage trip={effectiveTrip} phase={phase} />
+            </div>
+            <div className="h-[440px] rounded-2xl border border-hairline bg-panel/40 p-4">
+              <ActionFeed items={feed} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {dimmed && (
+        <PaymentGate
+          trip={effectiveTrip}
+          onApprove={handleApprove}
+          approving={approving}
+          confirming={confirming}
+          error={approveError}
+        />
+      )}
+
+      <PreviewControls value={previewKey} onChange={setPreviewKey} />
+    </main>
+  );
+}
+
+function MissionControlStrip({ connected, previewActive }: { connected: boolean; previewActive: boolean }) {
+  const [pastedText, setPastedText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(
+    action: () => Promise<Response>,
+    successNote: (body: Record<string, unknown>) => string
+  ) {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const res = await action();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+      setNote(successNote(body));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (previewActive) {
+    return (
+      <div className="mt-5 flex items-center justify-between rounded-lg border border-dashed border-amber/50 bg-panel/40 px-4 py-3">
+        <p className="font-mono text-xs uppercase tracking-widest text-amber">
+          Previewing simulated data — switch to “Live” below to use real controls
+        </p>
+        <Link href="/canvas" className="font-mono text-xs uppercase tracking-widest text-ice hover:text-paper">
+          Open canvas →
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-3 rounded-lg border border-hairline bg-panel/40 px-4 py-3">
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{ backgroundColor: connected ? "var(--success)" : "var(--muted)" }}
+      />
+      <span className="font-mono text-[11px] uppercase tracking-widest text-muted">
+        {connected ? "Stream live" : "Connecting"}
+      </span>
+
+      <div className="mx-2 h-4 w-px bg-hairline" />
+
+      <button
+        onClick={() =>
+          run(
+            () => fetch("/api/import-email", { method: "POST" }),
+            (b) => `Imported "${(b.email as { subject?: string } | undefined)?.subject ?? "email"}"`
+          )
+        }
+        disabled={busy}
+        className="rounded border border-ice px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide text-ice hover:bg-ice/10 disabled:opacity-50"
+      >
+        Import latest email
+      </button>
+
+      <input
+        value={pastedText}
+        onChange={(e) => setPastedText(e.target.value)}
+        placeholder="…or paste trip text"
+        className="min-w-[220px] flex-1 rounded border border-hairline bg-bg px-3 py-1.5 font-mono text-[11px] text-paper placeholder:text-muted focus:border-ice focus:outline-none"
+      />
+      <button
+        onClick={() =>
+          run(
+            () =>
+              fetch("/api/extract", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: pastedText }),
+              }),
+            (b) => `Extracted via ${b.source as string}`
+          )
+        }
+        disabled={busy || !pastedText.trim()}
+        className="rounded border border-hairline px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide text-muted hover:text-paper disabled:opacity-50"
+      >
+        Extract
+      </button>
+
+      <div className="mx-2 h-4 w-px bg-hairline" />
+
+      <button
+        onClick={() => run(() => fetch("/api/agent", { method: "POST" }), () => "Swarm started")}
+        disabled={busy}
+        className="rounded bg-amber px-3 py-1.5 font-display text-[11px] uppercase tracking-wide text-bg hover:brightness-110 disabled:opacity-50"
+      >
+        Start swarm
+      </button>
+
+      <Link href="/canvas" className="ml-auto font-mono text-[11px] uppercase tracking-widest text-ice hover:text-paper">
+        Open canvas →
+      </Link>
+
+      {note && <p className="w-full font-mono text-[11px] text-success">{note}</p>}
+      {error && <p className="w-full font-mono text-[11px] text-signal">{error}</p>}
     </div>
   );
 }

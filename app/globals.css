@@ -3,25 +3,77 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0e1626;
+  --foreground: #f2ede2;
+
+  /* flight-ops palette */
+  --bg: #0e1626;
+  --panel: #16233a;
+  --hairline: #2a3b58;
+  --amber: #ffb915;
+  --ice: #8fc7e8;
+  --signal: #ff6a4d;
+  --success: #7ed9a2;
+  --muted: #93a3bc;
+  --paper: #f2ede2;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--hairline);
 }
 
 body {
   color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  font-feature-settings: "tnum" 1, "cv01" 1;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .hairline {
+    border-color: var(--hairline);
+  }
+
+  .bg-scanlines {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      rgba(143, 199, 232, 0.03) 0px,
+      rgba(143, 199, 232, 0.03) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
+
+  .shimmer-text {
+    background: linear-gradient(
+      90deg,
+      var(--muted) 0%,
+      var(--paper) 50%,
+      var(--muted) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+/* Respect reduced-motion: kill animation/transition duration everywhere
+   rather than removing classes, so layout never depends on motion running. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
