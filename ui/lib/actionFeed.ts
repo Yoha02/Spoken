@@ -11,9 +11,18 @@ export type FeedItem = {
 // generic rendering for anything else so new appendTrace() calls from
 // routes that don't have a mapping yet still show up sensibly.
 const LABELS: Record<string, (arg: string, ok: boolean) => string> = {
-  "gmail.getLatestTripEmail": (_arg, ok) => (ok ? "Read invite email" : "Gmail fetch failed"),
+  "gmail.getLatestTripEmail": (_arg, ok) =>
+    ok ? "HR inbox: read CEO travel email" : "Gmail fetch failed",
   "landingai.extractTripDetails": (arg, ok) =>
-    ok ? `Extracted trip details — "${arg}"` : `Extraction fell back to heuristics — "${arg}"`,
+    ok
+      ? `Landing AI extracted trip details — "${arg}"`
+      : `Landing AI fallback heuristics — "${arg}"`,
+  "intake.resolveEmployees": (arg, ok) =>
+    ok ? `Matched employees — ${arg}` : `Could not match employees — ${arg}`,
+  "vocalbridge.start_vocal_bridge_swarm": (arg, ok) =>
+    ok ? `Vocal Bridge swarm started — ${arg}` : `Vocal Bridge swarm skipped — ${arg}`,
+  "vocalbridge.placeOutboundCall": (arg, ok) =>
+    ok ? `Vocal Bridge calling ${arg}` : `Vocal Bridge call failed — ${arg}`,
   "sabre.getSabreToken": (_arg, ok) => (ok ? "Sabre: authenticated" : "Sabre: auth failed"),
 };
 

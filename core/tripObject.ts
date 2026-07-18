@@ -35,6 +35,12 @@ export type TripObject = {
 };
 
 function seedTrip(): TripObject {
+  // Static process.env.* access so Next.js loads these from .env.local.
+  const ravi = (process.env.EMPLOYEE_PHONE_RAVI || "+15550000001").trim();
+  const aashna = (process.env.EMPLOYEE_PHONE_AASHNA || "+15550000002").trim();
+  const nikhil = (process.env.EMPLOYEE_PHONE_NIKHIL || "+15550000003").trim();
+  const eyoha = (process.env.EMPLOYEE_PHONE_EYOHA || "+15550000004").trim();
+
   return {
     sessionId: "demo-session-1",
     // dest/dateRange/budgetPerPerson start blank — the group email fills
@@ -43,10 +49,10 @@ function seedTrip(): TripObject {
     dateRange: ["", ""],
     budgetPerPerson: 0,
     travelers: [
-      { id: "ravi", name: "Ravi", phone: "+15550000001", callStatus: "idle", transcript: [] },
-      { id: "aashna", name: "Aashna", phone: "+15550000002", callStatus: "idle", transcript: [] },
-      { id: "nikhil", name: "Nikhil", phone: "+15550000003", callStatus: "idle", transcript: [] },
-      { id: "eyoha", name: "Eyoha", phone: "+15550000004", callStatus: "idle", transcript: [] },
+      { id: "ravi", name: "Ravi", phone: ravi, callStatus: "idle", transcript: [] },
+      { id: "aashna", name: "Aashna", phone: aashna, callStatus: "idle", transcript: [] },
+      { id: "nikhil", name: "Nikhil", phone: nikhil, callStatus: "idle", transcript: [] },
+      { id: "eyoha", name: "Eyoha", phone: eyoha, callStatus: "idle", transcript: [] },
     ],
     legs: [],
     totalCost: 0,

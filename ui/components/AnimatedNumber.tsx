@@ -49,7 +49,8 @@ export function AnimatedNumber({
   return (
     <span className="tabular-nums">
       {prefix}
-      {display.toLocaleString()}
+      {/* Fixed locale so SSR and the browser never disagree on separators */}
+      {display.toLocaleString("en-US")}
     </span>
   );
 }

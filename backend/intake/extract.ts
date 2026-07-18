@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
+import { applyExtractionToTrip } from "@/backend/intake/applyExtraction";
 import { extractTripDetails } from "@/backend/intake/landingai";
-import { appendTrace, updateTrip } from "@/core/tripObject";
+import { appendTrace } from "@/core/tripObject";
 
-// Generic manual entry point: paste an email, a group-chat excerpt, or any
-// other plain text describing the trip. This is what importEmail() calls
-// under the hood too — use this path when there's no Gmail message to
-// fetch from (e.g. destination was shared in a group chat instead).
+// Generic manual entry point: paste a CEO→HR email, a group-chat excerpt, or any
+// plain text describing who needs to travel. Same Landing AI → Vocal Bridge chain
+// as importEmail (auto-swarm on by default; pass autoSwarm: false to skip calls).
 export async function extractTrip(req: Request) {
   const body = await req.json().catch(() => null);
   const text = body?.text;
+  const autoSwarm = body?.autoSwarm !== false;
 
   if (typeof text !== "string" || !text.trim()) {
     return NextResponse.json({ error: "Missing 'text' in request body" }, { status: 400 });
@@ -23,7 +24,13 @@ export async function extractTrip(req: Request) {
     ok: source === "landingai",
   });
 
-  updateTrip(fields);
+  const applied = await applyExtractionToTrip(fields, { autoSwarm });
 
-  return NextResponse.json({ fields, source });
+  return NextResponse.json({
+    fields: applied.fields,
+    source,
+    travelers: applied.travelers.map((t) => ({ id: t.id, name: t.name, phone: t.phone })),
+    unmatchedNames: applied.unmatchedNames,
+    swarm: applied.swarm,
+  });
 }

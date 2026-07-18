@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { applyExtractionToTrip } from "@/backend/intake/applyExtraction";
 import { getLatestTripEmail } from "@/backend/intake/gmail";
 import { extractTripDetails } from "@/backend/intake/landingai";
-import { appendTrace, updateTrip } from "@/core/tripObject";
+import { appendTrace } from "@/core/tripObject";
 
 export async function importEmail() {
   let email;
@@ -28,7 +29,15 @@ export async function importEmail() {
     ok: source === "landingai",
   });
 
-  updateTrip(fields);
+  // Landing AI result → resolve employees → invoke Vocal Bridge tool
+  const applied = await applyExtractionToTrip(fields, { autoSwarm: true });
 
-  return NextResponse.json({ email: { subject: email.subject, from: email.from }, fields, source });
+  return NextResponse.json({
+    email: { subject: email.subject, from: email.from },
+    fields: applied.fields,
+    source,
+    travelers: applied.travelers.map((t) => ({ id: t.id, name: t.name, phone: t.phone })),
+    unmatchedNames: applied.unmatchedNames,
+    swarm: applied.swarm,
+  });
 }

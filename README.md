@@ -6,21 +6,28 @@ organizer panel and a big-screen "canvas" view for the room.
 
 ## The flow
 
-1. **Email arrives.** One of the group emails the others with a destination,
-   dates, and a rough budget. The organizer hits **Import latest email**,
-   which fetches it via the Gmail API ([backend/intake/gmail.ts](backend/intake/gmail.ts))
-   and runs it through LandingAI extraction ([backend/intake/landingai.ts](backend/intake/landingai.ts))
-   to pull out `dest`, `dateRange`, and `budgetPerPerson`. No Gmail set up
-   yet, or the detail came from a group chat instead? Paste the text into
-   the box below the button — it hits the same extraction logic via
-   `/api/extract`.
-2. **Organizer clicks "Start swarm."** This calls `/api/agent`, which is meant
-   to place outbound voice calls (via VocalBridge) to each of the 4
-   travelers to collect their origin airport, seat preference, and dietary
-   restriction. Each call's transcript streams into `traveler.transcript`.
-3. **Sabre shops and books** flights/hotels against what the calls learned.
-4. **PayPal splits the final cost** across travelers.
-5. All of it — call status, transcripts, itinerary, tool trace — streams live
+1. **CEO emails HR (Gmail).** The CEO sends a travel request naming the
+   employees who need to go (e.g. three names), plus destination / dates /
+   budget. That lands in the **HR** Gmail inbox wired up via
+   `GMAIL_*` env vars.
+2. **HR invokes Landing AI.** On the organizer panel, HR hits
+   **Import latest email**. The app fetches the message
+   ([backend/intake/gmail.ts](backend/intake/gmail.ts)) and runs Landing AI
+   document extraction ([backend/intake/landingai.ts](backend/intake/landingai.ts))
+   to pull out `travelerNames`, `dest`, `dateRange`, and `budgetPerPerson`.
+   No Gmail yet? Paste the CEO email text and hit **Extract** — same pipeline
+   via `/api/extract`.
+3. **Landing AI → Vocal Bridge tool.** Extraction results are mapped to phones
+   via the employee directory
+   ([backend/intake/employeeDirectory.ts](backend/intake/employeeDirectory.ts)),
+   then the tool `start_vocal_bridge_swarm`
+   ([agent/tools/startVocalBridgeSwarm.ts](agent/tools/startVocalBridgeSwarm.ts))
+   places outbound Vocal Bridge calls to those employees to collect origin
+   airport, seat preference, and diet. Import auto-starts the swarm; **Start
+   swarm** re-runs it. Transcripts land on `traveler.transcript`.
+4. **Sabre shops and books** flights/hotels against what the calls learned.
+5. **PayPal splits the final cost** across travelers.
+6. All of it — call status, transcripts, itinerary, tool trace — streams live
    to both the organizer panel and the canvas via Server-Sent Events.
 
 ## Folder structure
@@ -63,10 +70,10 @@ anything inside `app/`.**
 
 | Domain | Files | Status |
 |---|---|---|
-| `agent/` | `voiceToken.ts` (mint VocalBridge token), `orchestrator.ts` ("Start swarm" — places the calls) | Stub (501) |
+| `agent/` | `vocalbridge/client.ts`, `tools/startVocalBridgeSwarm.ts`, `voiceToken.ts`, `orchestrator.ts` | Implemented (needs `VOCALBRIDGE_API_KEY`) |
 | `backend/sabre/` | `auth.ts` (token, implemented), `shop.ts`, `book.ts` | Auth done, shop/book stubbed (501) |
 | `backend/paypal/` | `split.ts` (split-payment requests) | Stub (501) |
-| `backend/intake/` | `gmail.ts`, `landingai.ts`, `extract.ts`, `importEmail.ts` | Implemented |
+| `backend/intake/` | `gmail.ts`, `landingai.ts`, `employeeDirectory.ts`, `applyExtraction.ts`, `extract.ts`, `importEmail.ts` | Implemented |
 | `ui/` | `dashboard/`, `canvas/`, `components/`, `hooks/`, `lib/` | Implemented |
 
 Pick your domain, implement it, and call into `core/tripObject.ts` to update
@@ -137,9 +144,45 @@ inbox without a live consent screen during the demo:
 5. Put all three in `.env.local`: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`,
    `GMAIL_REFRESH_TOKEN`.
 
-By default the app looks for an unread email with "trip" in the subject sent
-in the last 7 days (`GMAIL_QUERY` in `.env.local.example` — override it to
-match whatever subject line you'll actually use).
+By default the app looks for recent mail with "travel" or "trip" in the subject
+(`GMAIL_QUERY` in `.env.local.example` — override it to match the CEO subject
+line you'll actually use). Use the **HR** account for OAuth so CEO → HR mail
+is readable.
+
+### Example CEO → HR email
+
+```
+Subject: Travel needed — Q3 Austin offsite
+
+Hi HR,
+
+Please arrange travel for the following three employees:
+1. Ravi
+2. Aashna
+3. Nikhil
+
+Destination: Austin
+Dates: 2026-08-12 to 2026-08-15
+Budget ~$800 per person.
+
+Thanks,
+CEO
+```
+
+Landing AI extracts the three names; the directory maps them to E.164 phones
+(`EMPLOYEE_PHONE_*` in `.env.local`); Vocal Bridge dials them.
+
+## Vocal Bridge setup (outbound swarm)
+
+1. Create an agent at [vocalbridgeai.com](https://vocalbridgeai.com) and enable
+   **outbound calling** (paid/pilot; accept outbound ToS in the dashboard or via
+   `vb config set --outbound-enabled true --accept-outbound-tos`).
+2. Put the agent API key in `.env.local` as `VOCALBRIDGE_API_KEY` (or
+   `VOCAL_BRIDGE_API_KEY`). If you use an account-scoped key, also set
+   `VOCALBRIDGE_AGENT_ID`.
+3. Set real demo phones on the employee directory env vars (or edit
+   `backend/intake/employeeDirectory.ts`).
+4. Optional: mint a web token via `POST /api/voice-token` for in-browser voice.
 
 ## Sabre setup (for flight/hotel shopping)
 
