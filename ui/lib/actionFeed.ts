@@ -13,6 +13,8 @@ export type FeedItem = {
 const LABELS: Record<string, (arg: string, ok: boolean) => string> = {
   "gmail.getLatestTripEmail": (_arg, ok) =>
     ok ? "HR inbox: read CEO travel email" : "Gmail fetch failed",
+  "gmail.triggerFromGmail": (arg, ok) =>
+    ok ? `Gmail add-on triggered swarm — ${arg}` : `Gmail add-on trigger failed — ${arg}`,
   "landingai.extractTripDetails": (arg, ok) =>
     ok
       ? `Landing AI extracted trip details — "${arg}"`
@@ -24,6 +26,10 @@ const LABELS: Record<string, (arg: string, ok: boolean) => string> = {
   "vocalbridge.placeOutboundCall": (arg, ok) =>
     ok ? `Vocal Bridge calling ${arg}` : `Vocal Bridge call failed — ${arg}`,
   "sabre.getSabreToken": (_arg, ok) => (ok ? "Sabre: authenticated" : "Sabre: auth failed"),
+  "paypal.splitPayment": (arg, ok) =>
+    ok ? `PayPal split sent — ${arg}` : `PayPal split failed — ${arg}`,
+  "paypal.createOrder": (arg, ok) =>
+    ok ? `PayPal order created — ${arg}` : `PayPal order failed — ${arg}`,
 };
 
 export function buildActionFeed(trip: TripObject): FeedItem[] {

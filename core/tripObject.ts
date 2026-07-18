@@ -30,7 +30,15 @@ export type TripObject = {
   travelers: Traveler[];
   legs: Leg[];
   totalCost: number;
-  split?: { travelerId: string; amount: number; paypalStatus: "pending" | "requested" | "paid" }[];
+  split?: {
+    travelerId: string;
+    amount: number;
+    paypalStatus: "pending" | "requested" | "paid";
+    /** PayPal Checkout order id (sandbox/live). */
+    orderId?: string;
+    /** Buyer approval URL from the order links (rel=approve). */
+    approveUrl?: string;
+  }[];
   toolTrace: { ts: number; server: string; fn: string; arg: string; ok: boolean }[];
 };
 

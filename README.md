@@ -72,7 +72,7 @@ anything inside `app/`.**
 |---|---|---|
 | `agent/` | `vocalbridge/client.ts`, `tools/startVocalBridgeSwarm.ts`, `voiceToken.ts`, `orchestrator.ts` | Implemented (needs `VOCALBRIDGE_API_KEY`) |
 | `backend/sabre/` | `auth.ts` (token, implemented), `shop.ts`, `book.ts` | Auth done, shop/book stubbed (501) |
-| `backend/paypal/` | `split.ts` (split-payment requests) | Stub (501) |
+| `backend/paypal/` | `auth.ts`, `split.ts` (Checkout orders per traveler) | Implemented (sandbox `PAYPAL_*`) |
 | `backend/intake/` | `gmail.ts`, `landingai.ts`, `employeeDirectory.ts`, `applyExtraction.ts`, `extract.ts`, `importEmail.ts` | Implemented |
 | `ui/` | `dashboard/`, `canvas/`, `components/`, `hooks/`, `lib/` | Implemented |
 
@@ -171,6 +171,20 @@ CEO
 
 Landing AI extracts the three names; the directory maps them to E.164 phones
 (`EMPLOYEE_PHONE_*` in `.env.local`); Vocal Bridge dials them.
+
+## Trigger from Gmail (no portal click)
+
+HR can start the same pipeline **from Gmail** with a one-click add-on:
+
+1. Set `GMAIL_TRIGGER_SECRET` and a public `APP_URL` (ngrok/tunnel to this app).
+2. Install the Apps Script add-on in [gmail-addon/](gmail-addon/) on the **HR** account
+   (Script Properties: `SWARM_API_URL` = public URL, `SWARM_SECRET` = same secret).
+3. Open the CEO email → **Swarm Mode** side panel → **Start travel swarm**.
+
+That calls `POST /api/gmail/trigger` with the open message’s subject/body and runs
+Landing AI → employee directory → Vocal Bridge. Live view remains at `/canvas`.
+
+Full install steps: [gmail-addon/README.md](gmail-addon/README.md).
 
 ## Vocal Bridge setup (outbound swarm)
 
