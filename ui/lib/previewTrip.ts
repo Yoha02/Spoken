@@ -1,4 +1,4 @@
-import type { Leg, TripObject } from "@/lib/tripObject";
+import type { Leg, TripObject } from "@/core/tripObject";
 
 // Rehearsal-only snapshots. Nothing here is sent to the server or written
 // to the real TripObject — it exists purely so the visual system (which

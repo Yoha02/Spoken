@@ -1,4 +1,4 @@
-import type { Traveler } from "@/lib/tripObject";
+import type { Traveler } from "@/core/tripObject";
 import { StatusDot, callStatusStyle } from "./StatusDot";
 import { Chip } from "./Chip";
 

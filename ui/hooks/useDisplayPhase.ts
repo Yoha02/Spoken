@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Leg, TripObject } from "@/lib/tripObject";
-import { computeTripPhase, type TripPhase } from "@/lib/tripPhase";
+import type { Leg, TripObject } from "@/core/tripObject";
+import { computeTripPhase, type TripPhase } from "@/ui/lib/tripPhase";
 
 function legKey(leg: Leg, index: number): string {
   // Legs don't carry a stable id; type+index is stable identity as long as

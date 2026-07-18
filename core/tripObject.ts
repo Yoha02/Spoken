@@ -1,4 +1,6 @@
-// lib/tripObject.ts — the single source of truth. One in-memory object per demo session.
+// core/tripObject.ts — the single source of truth. One in-memory object per
+// demo session. This is the shared contract every domain (agent/, backend/,
+// ui/) depends on — change the type shape only with the team's sign-off.
 export type Traveler = {
   id: string;            // "nikhil" | "priya" | "marco" | "sam"
   name: string;

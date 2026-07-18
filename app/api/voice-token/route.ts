@@ -1,11 +1,4 @@
-import { NextResponse } from "next/server";
+import { mintVoiceToken } from "@/agent/voiceToken";
 
-// Owner: fill in with VocalBridge token minting (server-side only — never expose
-// VOCALBRIDGE_API_KEY to the browser).
-export async function POST() {
-  return NextResponse.json({ error: "not implemented" }, { status: 501 });
-}
-
-export async function GET() {
-  return NextResponse.json({ error: "not implemented" }, { status: 501 });
-}
+export const POST = mintVoiceToken;
+export const GET = mintVoiceToken;

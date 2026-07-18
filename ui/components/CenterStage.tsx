@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Leg, TripObject } from "@/lib/tripObject";
-import type { TripPhase } from "@/lib/tripPhase";
+import type { Leg, TripObject } from "@/core/tripObject";
+import type { TripPhase } from "@/ui/lib/tripPhase";
 import { StatusDot } from "./StatusDot";
 
 function useElapsed(active: boolean): string {

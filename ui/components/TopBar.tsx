@@ -1,5 +1,5 @@
-import type { TripObject } from "@/lib/tripObject";
-import type { TripPhase } from "@/lib/tripPhase";
+import type { TripObject } from "@/core/tripObject";
+import type { TripPhase } from "@/ui/lib/tripPhase";
 import { PhaseBadge } from "./PhaseBadge";
 import { AnimatedNumber } from "./AnimatedNumber";
 

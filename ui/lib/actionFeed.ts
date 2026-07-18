@@ -1,4 +1,4 @@
-import type { TripObject } from "@/lib/tripObject";
+import type { TripObject } from "@/core/tripObject";
 
 export type FeedItem = {
   id: string;

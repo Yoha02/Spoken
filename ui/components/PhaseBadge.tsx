@@ -1,4 +1,4 @@
-import { PHASE_COLOR_VAR, PHASE_LABEL, type TripPhase } from "@/lib/tripPhase";
+import { PHASE_COLOR_VAR, PHASE_LABEL, type TripPhase } from "@/ui/lib/tripPhase";
 
 export function PhaseBadge({ phase }: { phase: TripPhase }) {
   const color = PHASE_COLOR_VAR[phase];

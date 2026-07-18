@@ -1,4 +1,4 @@
-import { PREVIEW_KEYS, type PreviewKey } from "@/lib/previewTrip";
+import { PREVIEW_KEYS, type PreviewKey } from "@/ui/lib/previewTrip";
 
 const LABELS: Record<PreviewKey, string> = {
   planning: "Planning",

@@ -1,4 +1,4 @@
-import type { FeedItem } from "@/lib/actionFeed";
+import type { FeedItem } from "@/ui/lib/actionFeed";
 import { MonoTimestamp } from "./MonoTimestamp";
 
 export function ActionFeed({ items }: { items: FeedItem[] }) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { TripObject } from "@/lib/tripObject";
+import type { TripObject } from "@/core/tripObject";
 
 export function useTripStream() {
   const [trip, setTrip] = useState<TripObject | null>(null);

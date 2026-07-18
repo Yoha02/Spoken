@@ -8,11 +8,12 @@ organizer panel and a big-screen "canvas" view for the room.
 
 1. **Email arrives.** One of the group emails the others with a destination,
    dates, and a rough budget. The organizer hits **Import latest email**,
-   which fetches it via the Gmail API ([lib/gmail.ts](lib/gmail.ts)) and runs it
-   through LandingAI extraction ([lib/landingai.ts](lib/landingai.ts)) to pull out
-   `dest`, `dateRange`, and `budgetPerPerson`. No Gmail set up yet, or the
-   detail came from a group chat instead? Paste the text into the box below
-   the button — it hits the same extraction logic via `/api/extract`.
+   which fetches it via the Gmail API ([backend/intake/gmail.ts](backend/intake/gmail.ts))
+   and runs it through LandingAI extraction ([backend/intake/landingai.ts](backend/intake/landingai.ts))
+   to pull out `dest`, `dateRange`, and `budgetPerPerson`. No Gmail set up
+   yet, or the detail came from a group chat instead? Paste the text into
+   the box below the button — it hits the same extraction logic via
+   `/api/extract`.
 2. **Organizer clicks "Start swarm."** This calls `/api/agent`, which is meant
    to place outbound voice calls (via VocalBridge) to each of the 4
    travelers to collect their origin airport, seat preference, and dietary
@@ -22,45 +23,80 @@ organizer panel and a big-screen "canvas" view for the room.
 5. All of it — call status, transcripts, itinerary, tool trace — streams live
    to both the organizer panel and the canvas via Server-Sent Events.
 
+## Folder structure
+
+The codebase is split into four top-level domains so four people can work at
+once without stepping on each other's files:
+
+```
+core/       shared contract — TripObject store + SSE plumbing. Nobody "owns"
+            this; touch it only with the team's sign-off, since every other
+            domain depends on its shape staying stable.
+agent/      voice/VocalBridge teammate. Orchestrates the outbound calls.
+backend/    integrations, one subfolder per vendor:
+              backend/sabre/    — flight/hotel shopping + booking
+              backend/paypal/   — split-payment requests
+              backend/intake/   — Gmail + LandingAI (already implemented)
+ui/         frontend teammate. Dashboard, canvas, shared components, hooks.
+app/        Next.js routing shell ONLY — thin, you shouldn't need to touch
+            these files after initial setup.
+```
+
+`app/api/**/route.ts` files are one-liners that just re-export a handler
+from the owning domain, e.g.:
+
+```ts
+// app/api/sabre/shop/route.ts
+import { shopSabre } from "@/backend/sabre/shop";
+export const POST = shopSabre;
+```
+
+Next.js requires route handlers to physically live under `app/api/`, so
+this file has to exist — but the actual logic you're implementing lives in
+`backend/sabre/shop.ts`. Same pattern for `app/page.tsx` /
+`app/canvas/page.tsx`, which just re-export `ui/dashboard/Dashboard.tsx` and
+`ui/canvas/Canvas.tsx`. In practice: **find your work in `agent/`,
+`backend/<vendor>/`, or `ui/` — you should almost never need to edit
+anything inside `app/`.**
+
+## Who owns what
+
+| Domain | Files | Status |
+|---|---|---|
+| `agent/` | `voiceToken.ts` (mint VocalBridge token), `orchestrator.ts` ("Start swarm" — places the calls) | Stub (501) |
+| `backend/sabre/` | `auth.ts` (token, implemented), `shop.ts`, `book.ts` | Auth done, shop/book stubbed (501) |
+| `backend/paypal/` | `split.ts` (split-payment requests) | Stub (501) |
+| `backend/intake/` | `gmail.ts`, `landingai.ts`, `extract.ts`, `importEmail.ts` | Implemented |
+| `ui/` | `dashboard/`, `canvas/`, `components/`, `hooks/`, `lib/` | Implemented |
+
+Pick your domain, implement it, and call into `core/tripObject.ts` to update
+state (`getTrip()`, `updateTrip()`, `appendTranscript()`, `appendTrace()`).
+Since each domain is its own folder, you shouldn't hit merge conflicts —
+just don't edit `core/tripObject.ts`'s type shape without telling the team,
+since every domain depends on it. `backend/intake/landingai.ts`'s LandingAI
+call and `backend/sabre/auth.ts`'s auth call are both best-effort (verify
+endpoint/payload shapes against current docs before the demo — neither
+vendor's exact request contract was fully nailed down when these were
+written). `landingai.ts` falls back to a rough regex extraction if the API
+call fails so a live demo doesn't stall on it; `sabre/auth.ts` doesn't (a
+flight search can't be faked), so if `/api/sabre/token` reports failure,
+that's your signal to check the request shape.
+
 ## Architecture
 
-Everything hangs off a single in-memory `TripObject` ([lib/tripObject.ts](lib/tripObject.ts)) —
+Everything hangs off a single in-memory `TripObject` ([core/tripObject.ts](core/tripObject.ts)) —
 there's no database. Any route handler reads/writes it via `getTrip()`,
 `updateTrip()`, `appendTranscript()`, and `appendTrace()`. Every mutation
-notifies subscribers, which [app/api/stream/route.ts](app/api/stream/route.ts)
-turns into a Server-Sent Events feed. Both pages (`/` and `/canvas`) just
-subscribe to that stream — no polling, no client-side state to reconcile.
+notifies subscribers, which [core/stream.ts](core/stream.ts) (wired up at
+`app/api/stream/route.ts`) turns into a Server-Sent Events feed. Both pages
+(`/` and `/canvas`) just subscribe to that stream — no polling, no
+client-side state to reconcile.
 
 Because the store is in-memory, it resets on every `next dev` reload of the
 server process (not on hot-reload of your edits — it's stashed on
 `globalThis` to survive that) and does not persist across `next build`/`next
 start` restarts or multiple server instances. That's intentional for a demo;
 don't reach for this pattern in production.
-
-## Who owns what
-
-| Route | Owns | Status |
-|---|---|---|
-| `app/api/import-email/route.ts` | Fetch latest trip email, run extraction, update trip | Implemented |
-| `app/api/extract/route.ts` | Manual text → extraction (email paste or group-chat text) | Implemented |
-| `app/api/voice-token/route.ts` | Minting a VocalBridge client token | Stub (501) |
-| `app/api/agent/route.ts` | Voice-agent orchestration, "Start swarm" entrypoint | Stub (501) |
-| `app/api/sabre/token/route.ts` | Diagnostic — confirms Sabre auth works | Implemented |
-| `app/api/sabre/shop/route.ts` | Sabre flight/hotel shopping | Stub (501) |
-| `app/api/sabre/book/route.ts` | Sabre booking / PNR creation | Stub (501) |
-| `app/api/paypal/split/route.ts` | PayPal split-payment requests | Stub (501) |
-
-Pick a stub, implement it, and call into `lib/tripObject.ts` to update
-state. Since everyone's route is a separate file, you shouldn't hit merge
-conflicts — just don't edit `lib/tripObject.ts`'s type shape without telling
-the team, since it's shared. `lib/landingai.ts`'s LandingAI call and
-`lib/sabre.ts`'s auth call are both best-effort (verify endpoint/payload
-shapes against current docs before the demo — neither vendor's exact
-request contract was fully nailed down when these were written).
-`lib/landingai.ts` falls back to a rough regex extraction if the API call
-fails so a live demo doesn't stall on it; `lib/sabre.ts` doesn't (a flight
-search can't be faked), so if `/api/sabre/token` reports failure, that's
-your signal to check the request shape.
 
 ## Run it
 
@@ -109,9 +145,9 @@ match whatever subject line you'll actually use).
 
 Sabre's stateless REST APIs authenticate via a sessionless token (valid 7
 days, no session/inactivity limits — a good fit since our API routes are
-stateless). There are two versions; [lib/sabre.ts](lib/sabre.ts) defaults to
-**v2** because it's EPR-only and needs no Client ID/Secret — the right fit
-for Developer Hub / DEVCENTER test credentials:
+stateless). There are two versions; [backend/sabre/auth.ts](backend/sabre/auth.ts)
+defaults to **v2** because it's EPR-only and needs no Client ID/Secret — the
+right fit for Developer Hub / DEVCENTER test credentials:
 
 - `SABRE_EPR_USERNAME` (format `V1:<userid>:<PCC>:<domain>`) /
   `SABRE_EPR_PASSWORD` — your EPR login.
@@ -123,9 +159,9 @@ still required (they go in the request body instead of the header).
 
 Sabre's Authorization header isn't a plain `base64(user:pass)` — it
 base64-encodes the username and password **separately**, joins them with
-`:`, then base64-encodes that combined string again. `lib/sabre.ts` handles
-this for you; it's called out here because it's easy to get wrong if you
-ever touch that code.
+`:`, then base64-encodes that combined string again. `backend/sabre/auth.ts`
+handles this for you; it's called out here because it's easy to get wrong
+if you ever touch that code.
 
 Don't have your own PCC/EPR yet? Sabre Developer Hub's "Get a Token" guide
 points to a shared **DEVCENTER** test username/password for trying PCC-gated
@@ -160,6 +196,6 @@ the URL changes between sessions (free tier URLs aren't stable).
 
 The store seeds 4 travelers (`ravi`, `aashna`, `nikhil`, `eyoha`) with
 placeholder E.164 phone numbers — replace them in
-[lib/tripObject.ts](lib/tripObject.ts)'s `seedTrip()` before the real demo.
+[core/tripObject.ts](core/tripObject.ts)'s `seedTrip()` before the real demo.
 The destination, dates, and budget start blank and are filled in by the
 email import step above.

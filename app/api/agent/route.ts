@@ -1,7 +1,3 @@
-import { NextResponse } from "next/server";
+import { startSwarm } from "@/agent/orchestrator";
 
-// Owner: fill in with the voice-agent orchestration logic (reads/writes the
-// shared TripObject via lib/tripObject.ts).
-export async function POST() {
-  return NextResponse.json({ error: "not implemented" }, { status: 501 });
-}
+export const POST = startSwarm;

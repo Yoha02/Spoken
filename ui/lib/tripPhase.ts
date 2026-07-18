@@ -1,4 +1,4 @@
-import type { Leg, TripObject } from "@/lib/tripObject";
+import type { Leg, TripObject } from "@/core/tripObject";
 
 export type TripPhase = "planning" | "booked" | "disrupted" | "rebooked" | "awaiting_payment" | "paid";
 

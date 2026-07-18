@@ -1,7 +1,3 @@
-import { NextResponse } from "next/server";
+import { shopSabre } from "@/backend/sabre/shop";
 
-// Owner: fill in with Sabre flight/hotel shopping (SABRE_CLIENT_ID /
-// SABRE_CLIENT_SECRET stay server-side only).
-export async function POST() {
-  return NextResponse.json({ error: "not implemented" }, { status: 501 });
-}
+export const POST = shopSabre;

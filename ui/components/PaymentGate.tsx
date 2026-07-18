@@ -1,4 +1,4 @@
-import type { TripObject } from "@/lib/tripObject";
+import type { TripObject } from "@/core/tripObject";
 
 const STATUS_TONE: Record<string, string> = {
   pending: "var(--muted)",

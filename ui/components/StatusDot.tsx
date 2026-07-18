@@ -1,4 +1,4 @@
-import type { Traveler } from "@/lib/tripObject";
+import type { Traveler } from "@/core/tripObject";
 
 const STATUS_STYLES: Record<Traveler["callStatus"], { color: string; pulse: boolean; label: string }> = {
   idle: { color: "var(--muted)", pulse: false, label: "Idle" },
