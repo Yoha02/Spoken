@@ -1,7 +1,7 @@
 # Checkpoint
 
 > Overwrite this file in place. A task is not done until this file reflects it.
-> Last updated: 2026-07-18 13:45 PT by Yoha's Cursor agent
+> Last updated: 2026-07-19 00:15 PT by Nikhil's Claude agent
 
 ## Where we are
 
@@ -47,8 +47,8 @@
 | `backend/intake/` Gmail + LandingAI | Done (LandingAI key still missing → regex fallback fires) |
 | `agent/` VB swarm calls | Done; agents need outbound + interview prompt configured in VB dashboard |
 | `backend/paypal/` corporate checkout | Done — **corporate account model**: gate is HR "Verify trip expenses" (per-traveler breakdown + total, X to dismiss, "Authorize payment"), creates ONE PayPal order for the full booked total; capture marks everything paid → TripConfirmation cards. **Billing rule (decided 07-18 13:00): booked expenses (legs/totalCost) are the charge; budgetPerPerson × headcount is only a pre-booking estimate fallback — budget is a cap, never overrides booked totals.** Verified E2E in sandbox: $2,429 booked total → one order, 3 equal display shares, order reuse on re-authorize works. Still needed: sandbox buyer login to complete checkout on camera; add creds to Cloud Run env on next deploy. Confirmation emails after payment = Ravi. |
-| `backend/sabre/` auth | Done (needs EPR creds to verify via GET /api/sabre/token) |
-| `backend/sabre/` shop + book | **Stubbed 501 — critical path, in progress (see Claims)** |
+| `backend/sabre/` auth | REST creds (EPR/DEVCENTER) don't authenticate for this PCC — abandoned. Real auth path is the MCP server below. |
+| `backend/sabre/` shop + book | **Live and working — see `memory/decisions/2026-07-19-sabre-mcp-shop-book.md`.** Real Sabre MCP client (`backend/sabre/mcpClient.ts`) hits `mcp2.cert.sabre.com`. `shop.ts`: real flight + hotel search, writes proposed legs + totalCost. `book.ts`: books flights and hotel as two independent `create-booking` calls so one failing doesn't sink the other. **Hotel booking is reliable** (real confirmation IDs, e.g. `RRMJYH`, `RYCSUD`) — uses a generic test card (`SABRE_TEST_CARD_*` env vars, cert never charges it). **Flight booking is real but flaky in Sabre's cert backend** — succeeded once (PNR `RVUJVC`) out of ~9 attempts, otherwise fails with a generic Sabre-side `OTA_AirBookLLSRQ` service error unrelated to our payload. UI already degrades gracefully: action feed shows whichever side succeeded/failed with the real Sabre error text. Needs `SABRE_HACKATHON_TOKEN` + `SABRE_PCC` in `.env.local` (not yet on Cloud Run). |
 | Disruption → self-heal (clip 4) | **Done — Trip Guardian**: 6th timeline stage (clickable after payment) arms `POST /api/guardian` → paced tracking view: Uber pickups + departure on time → mid-flight wildfire-smoke delay (+1h05m, dot flips red, flight ETAs update to 3:40 PM) → self-heal (Uber rescheduled, VB call to Kimber Modern, Sabre booking modified at **$0 change · no approval needed**) → SMS to travelers → dot back green + "continuing to monitor" close (~47s total). Verified E2E locally. |
 | `ui/` dashboard + canvas | Done (server preview timeline covers clips 1–3; local phase-preview strip removed) |
 
@@ -59,12 +59,16 @@
 | Ravi | Connect Gmail add-on to live Cloud Run URL, validate LandingAI end-to-end | 07-18 09:20 |
 | Yoha's Cursor agent | Trip Guardian shipped; next: Cloud Run redeploy for recording | 07-18 13:45 |
 | Nikhil | Recording his call clip at the gym; VB agent outbound config | 07-18 morning |
+| Nikhil's Claude agent | Sabre shop/book shipped live via MCP (done — see status table + decision note); not an active claim anymore | 07-19 00:15 |
 
 ## Next steps (ordered)
 
 1. Ravi: set Apps Script Script Properties (`SWARM_API_URL` = Cloud Run URL, `SWARM_SECRET` =
    trigger secret from Yoha) → click "Start travel swarm" on the CEO email → verify dashboard.
-2. Sabre shop → writes flight legs + totalCost; book → flips legs to booked (unlocks payment gate).
+2. ~~Sabre shop → writes flight legs + totalCost; book → flips legs to booked~~ DONE — real MCP
+   shop/book live. Hotel books reliably; flight booking is real but Sabre's cert backend only
+   succeeds ~1 in 9 tries (see decision note) — preview mode remains the safe recording fallback
+   if flight booking doesn't cooperate on camera.
 3. ~~Disrupt/self-heal routes~~ DONE — Trip Guardian (clip 4 recordable end-to-end).
 4. Configure both VB agents with the interview prompt, outbound enabled, one test call.
 5. Record clips (order: 2 → 1 → 3 → 4); dashboard preview mode is the fallback for any clip.
@@ -73,7 +77,10 @@
 
 ## Blocked on humans
 
-- **Sabre EPR credentials** (`SABRE_EPR_USERNAME` in `V1:<userid>:<PCC>:<domain>` format + password) — #1 blocker, from Developer Hub.
+- ~~Sabre EPR credentials~~ RESOLVED via a different path — REST/EPR creds never authenticated
+  for this PCC, but the hackathon `SABRE_HACKATHON_TOKEN` works against Sabre's MCP server
+  (`mcp2.cert.sabre.com`), which is what `shop.ts`/`book.ts` now use for real. Needs the token +
+  `SABRE_PCC` + `SABRE_TEST_CARD_*` added to the Cloud Run env on next deploy.
 - ~~PayPal sandbox CLIENT_ID/SECRET~~ RESOLVED — in Yoha's `.env.local`, order creation verified. Still need a **sandbox buyer login** to complete checkout on camera (or pay-by-card in sandbox).
 - Video editing volunteer for the final cut.
 - ~~LandingAI key~~ RESOLVED — live and verified on Cloud Run.
